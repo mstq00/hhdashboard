@@ -1,0 +1,90 @@
+.customer-detail-item {
+    background: white;
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+}
+
+.customer-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 15px;
+}
+
+.customer-name {
+    font-weight: 500;
+}
+
+.customer-contact {
+    color: #666;
+    font-weight: normal;
+}
+
+.customer-total {
+    font-size: 16px;
+    font-weight: 500;
+    color: #333;
+    margin-top: 8px;
+}
+
+.purchase-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.purchase-count {
+    color: #666;
+    font-size: 14px;
+}
+
+.purchase-dates {
+    color: #888;
+    font-size: 13px;
+}
+
+@media (max-width: 768px) {
+    .customer-detail-item {
+        grid-template-columns: 1fr;
+    }
+
+    .purchase-info {
+        align-items: flex-start;
+        margin-top: 8px;
+    }
+}
+
+/* 채널별 매출 테이블 스타일 */
+.channel-sales-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.channel-sales-table th,
+.channel-sales-table td {
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.channel-sales-table th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+}
+
+.channel-sales-table td:last-child {
+    text-align: right;
+}
+
+.detail-section h4 {
+    margin-top: 15px;
+    margin-bottom: 10px;
+    font-size: 16px;
+    color: #555;
+}

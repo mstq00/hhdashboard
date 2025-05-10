@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 사용자가 인증되었는지 확인하는 함수
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // 이메일이 인증되었는지 확인하는 함수
+    function isEmailVerified() {
+      return request.auth.token.email_verified;
+    }
+    
+    // 기본 규칙: 인증된 사용자만 접근 가능
+    match /{document=**} {
+      allow read, write: if isAuthenticated() ;
+    }
+    
+    // 매출 정보 관련 컬렉션
+    match /sales/{document=**} {
+      allow read, write: if isAuthenticated() ;
+    }
+    
+    // 주문 정보 관련 컬렉션
+    match /orders/{document=**} {
+      allow read, write: if isAuthenticated() ;
+    }
+  }
+}

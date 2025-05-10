@@ -1,0 +1,471 @@
+import { Client } from '@notionhq/client';
+import { cache } from 'react';
+
+// 노션 클라이언트 초기화
+const notion = new Client({
+  auth: process.env.NOTION_API_KEY,
+});
+
+// 캐시 설정
+const CACHE_DURATION = 60 * 60 * 1000; // 1시간
+let totalSalesCache: { data: any; timestamp: number } | null = null;
+let orderDataCache: { data: any; timestamp: number } | null = null;
+
+// 캐시 유효성 검사
+function isCacheValid(cache: { timestamp: number } | null): boolean {
+  if (!cache) return false;
+  return Date.now() - cache.timestamp < CACHE_DURATION;
+}
+
+// 통합매출 데이터 가져오기
+export const fetchTotalSalesData = cache(async (year?: number) => {
+  try {
+    // 캐시 확인
+    if (isCacheValid(totalSalesCache)) {
+      console.log('통합매출 데이터 캐시 사용');
+      return totalSalesCache!.data;
+    }
+
+    const currentYear = year || new Date().getFullYear();
+    console.log(`${currentYear}년 통합매출 데이터 가져오는 중...`);
+
+    // 공동구매 매출 데이터베이스 ID
+    const groupSalesDbId = process.env.NOTION_TOTAL_SALES_DATABASE_ID;
+    // 유료광고 수익 데이터베이스 ID
+    const adRevenueDbId = process.env.NOTION_TOTAL_SALES_DETAIL_DATABASE_ID;
+    
+    if (!groupSalesDbId || !adRevenueDbId) {
+      throw new Error('노션 데이터베이스 ID 환경 변수가 설정되지 않았습니다.');
+    }
+
+    // 월별 데이터를 저장할 객체 초기화
+    const monthlyData: Record<number, {
+      month: number,
+      year: number,
+      storeSales: number,
+      adRevenue: number,
+      groupSales: number,
+      totalSales: number,
+      notes: string
+    }> = {};
+
+    // 1~12월 데이터 초기화
+    for (let month = 1; month <= 12; month++) {
+      monthlyData[month] = {
+        month,
+        year: currentYear,
+        storeSales: 0,
+        adRevenue: 0, 
+        groupSales: 0,
+        totalSales: 0,
+        notes: ''
+      };
+    }
+
+    // 1. 공동구매 매출 데이터 가져오기
+    console.log('공동구매 매출 데이터 가져오는 중...');
+    try {
+      const groupSalesInfo = await notion.databases.retrieve({
+        database_id: groupSalesDbId,
+      });
+      
+      console.log('공동구매 데이터베이스 속성:', Object.keys(groupSalesInfo.properties).join(', '));
+      
+      let groupSalesResponse;
+      try {
+        groupSalesResponse = await notion.databases.query({
+          database_id: groupSalesDbId,
+          filter: {
+            and: [
+              {
+                property: '일정',
+                date: {
+                  on_or_after: `${currentYear}-01-01`,
+                },
+              },
+              {
+                property: '일정',
+                date: {
+                  before: `${currentYear+1}-01-01`,
+                },
+              },
+            ],
+          },
+        });
+      } catch (error) {
+        console.log('공동구매 데이터 조회 오류, 필터 없이 재시도합니다.', error);
+        groupSalesResponse = await notion.databases.query({
+          database_id: groupSalesDbId,
+        });
+      }
+
+      // 공동구매 데이터 처리
+      groupSalesResponse.results.forEach((page: any) => {
+        const properties = page.properties;
+        
+        // 일정(date) 속성에서 시작일 가져오기
+        const scheduleProperty = findPropertyByType(properties, 'date', '일정', 'Schedule');
+        const scheduleDateStr = getDateValue(properties, scheduleProperty);
+        
+        if (scheduleDateStr) {
+          const scheduleDate = new Date(scheduleDateStr);
+          const month = scheduleDate.getMonth() + 1; // 0-11 => 1-12
+          const year = scheduleDate.getFullYear();
+          
+          // 해당 연도의 데이터만 처리
+          if (year === currentYear && month >= 1 && month <= 12) {
+            // 매출액 가져오기
+            const salesProperty = findPropertyByType(properties, 'number', '매출액', 'Sales Amount');
+            const salesAmount = getNumberValue(properties, salesProperty);
+            
+            // 월별 데이터에 추가
+            if (monthlyData[month]) {
+              monthlyData[month].groupSales += salesAmount;
+            }
+          }
+        }
+      });
+      
+      console.log('공동구매 매출 데이터 로드 완료');
+    } catch (error) {
+      console.error('공동구매 매출 데이터 로드 실패:', error);
+    }
+
+    // 2. 유료광고 수익 데이터 가져오기
+    console.log('유료광고 수익 데이터 가져오는 중...');
+    try {
+      const adRevenueInfo = await notion.databases.retrieve({
+        database_id: adRevenueDbId,
+      });
+      
+      console.log('유료광고 데이터베이스 속성:', Object.keys(adRevenueInfo.properties).join(', '));
+      
+      let adRevenueResponse;
+      try {
+        adRevenueResponse = await notion.databases.query({
+          database_id: adRevenueDbId,
+          filter: {
+            and: [
+              {
+                property: '정산입금일',
+                date: {
+                  on_or_after: `${currentYear}-01-01`,
+                },
+              },
+              {
+                property: '정산입금일',
+                date: {
+                  before: `${currentYear+1}-01-01`,
+                },
+              },
+            ],
+          },
+        });
+      } catch (error) {
+        console.log('유료광고 데이터 조회 오류, 필터 없이 재시도합니다.', error);
+        adRevenueResponse = await notion.databases.query({
+          database_id: adRevenueDbId,
+        });
+      }
+
+      // 유료광고 데이터 처리
+      adRevenueResponse.results.forEach((page: any) => {
+        const properties = page.properties;
+        
+        // 정산입금일 속성 가져오기
+        const depositDateProperty = findPropertyByType(properties, 'date', '정산입금일', 'Settlement Date');
+        const depositDateStr = getDateValue(properties, depositDateProperty);
+        
+        if (depositDateStr) {
+          const depositDate = new Date(depositDateStr);
+          const month = depositDate.getMonth() + 1; // 0-11 => 1-12
+          const year = depositDate.getFullYear();
+          
+          // 해당 연도의 데이터만 처리
+          if (year === currentYear && month >= 1 && month <= 12) {
+            // 정산금액 가져오기
+            const amountProperty = findPropertyByType(properties, 'number', '정산금액', 'Settlement Amount');
+            const amount = getNumberValue(properties, amountProperty);
+            
+            // 월별 데이터에 추가
+            if (monthlyData[month]) {
+              monthlyData[month].adRevenue += amount;
+            }
+          }
+        }
+      });
+      
+      console.log('유료광고 수익 데이터 로드 완료');
+    } catch (error) {
+      console.error('유료광고 수익 데이터 로드 실패:', error);
+    }
+
+    // 3. 스토어 매출 데이터는 다른 API로부터 가져옴 (여기서는 더미 데이터)
+    // TODO: 실제 스토어 매출 데이터를 API에서 가져오는 로직 구현 필요
+    console.log('스토어 매출 데이터 연동 준비...');
+
+    // 4. 월별 합계 계산
+    Object.values(monthlyData).forEach(data => {
+      data.totalSales = data.storeSales + data.adRevenue + data.groupSales;
+    });
+
+    // 배열로 변환
+    const resultData = Object.values(monthlyData);
+    
+    // 캐시 저장
+    totalSalesCache = {
+      data: resultData,
+      timestamp: Date.now()
+    };
+    
+    return resultData;
+  } catch (error) {
+    console.error('통합매출 데이터 로드 실패:', error);
+    return [];
+  }
+});
+
+// 속성 타입별로 속성 찾기 (여러 가능한 이름으로 검색)
+function findPropertyByType(properties: any, type: string, ...possibleNames: string[]): string | null {
+  for (const key in properties) {
+    if (properties[key].type === type && 
+        (possibleNames.includes(key) || 
+         possibleNames.some(name => key.toLowerCase().includes(name.toLowerCase())))) {
+      return key;
+    }
+  }
+  return null;
+}
+
+// 숫자 속성 값 가져오기
+function getNumberValue(properties: any, propertyName: string | null): number {
+  if (!propertyName || !properties[propertyName]) return 0;
+  return properties[propertyName].number || 0;
+}
+
+// 리치텍스트 속성 값 가져오기
+function getRichTextValue(properties: any, propertyName: string | null): string {
+  if (!propertyName || !properties[propertyName]) return '';
+  return properties[propertyName].rich_text?.map((text: any) => text.text.content).join('') || '';
+}
+
+// 통합매출 상세 데이터 가져오기
+export const fetchTotalSalesDetailData = cache(async (month: number, year?: number) => {
+  try {
+    const currentYear = year || new Date().getFullYear();
+    console.log(`${currentYear}년 ${month}월 통합매출 상세 데이터 가져오는 중...`);
+
+    // 노션 데이터베이스 ID는 환경 변수에서 가져옴
+    const databaseId = process.env.NOTION_TOTAL_SALES_DETAIL_DATABASE_ID;
+    
+    if (!databaseId) {
+      throw new Error('NOTION_TOTAL_SALES_DETAIL_DATABASE_ID 환경 변수가 설정되지 않았습니다.');
+    }
+
+    // 데이터베이스 구조 조회
+    const databaseInfo = await notion.databases.retrieve({
+      database_id: databaseId,
+    });
+    
+    console.log('상세 데이터베이스 속성:', Object.keys(databaseInfo.properties).join(', '));
+    
+    // 모든 데이터 가져오기 (필터링은 클라이언트에서)
+    const response = await notion.databases.query({
+      database_id: databaseId,
+    });
+    
+    // 데이터 변환
+    const allDetailData = response.results.map((page: any) => {
+      const properties = page.properties;
+      
+      // 노션 속성 찾기
+      const dateProperty = findPropertyByType(properties, 'date', 'Date', '일정', '정산입금일자', '날짜', '일자');
+      const channelProperty = findPropertyByType(properties, 'select', 'Channel', '채널', '이름');
+      const amountProperty = findPropertyByType(properties, 'number', 'Amount', '매출액', '정산금액', '금액');
+      const categoryProperty = findPropertyByType(properties, 'select', 'Category', '분류');
+      const descriptionProperty = findPropertyByType(properties, 'rich_text', 'Description', '설명', '메모');
+      
+      // 날짜 처리
+      let dateStr = '';
+      if (dateProperty && properties[dateProperty].date) {
+        dateStr = properties[dateProperty].date.start;
+      }
+      
+      // 년/월 추출
+      let dateYear = 0;
+      let dateMonth = 0;
+      if (dateStr) {
+        const date = new Date(dateStr);
+        dateYear = date.getFullYear();
+        dateMonth = date.getMonth() + 1; // 0-based → 1-based
+      }
+      
+      const channelName = getSelectValue(properties, channelProperty);
+      const category = getSelectValue(properties, categoryProperty);
+      const amount = getNumberValue(properties, amountProperty);
+      const description = getRichTextValue(properties, descriptionProperty);
+      
+      return {
+        id: page.id,
+        date: dateStr,
+        year: dateYear,
+        month: dateMonth,
+        channel: channelName,
+        category: category,
+        amount: amount,
+        description: description,
+      };
+    });
+    
+    // 년/월로 필터링
+    const filteredData = allDetailData.filter(item => 
+      item.year === currentYear && item.month === month
+    );
+    
+    console.log(`${filteredData.length}개의 월별 상세 데이터 로드 완료`);
+    return filteredData;
+  } catch (error) {
+    console.error('월별 상세 데이터 로드 실패:', error);
+    return [];
+  }
+});
+
+// 발주 데이터 가져오기
+export const fetchOrderData = cache(async () => {
+  try {
+    // 캐시 확인
+    if (isCacheValid(orderDataCache)) {
+      console.log('발주 데이터 캐시 사용');
+      return orderDataCache!.data;
+    }
+
+    console.log('발주 데이터 가져오는 중...');
+
+    // 노션 데이터베이스 ID는 환경 변수에서 가져옴
+    const databaseId = process.env.NOTION_ORDER_DATABASE_ID;
+    
+    if (!databaseId) {
+      throw new Error('NOTION_ORDER_DATABASE_ID 환경 변수가 설정되지 않았습니다.');
+    }
+
+    // 데이터베이스 구조 조회
+    const databaseInfo = await notion.databases.retrieve({
+      database_id: databaseId,
+    });
+    
+    console.log('발주 데이터베이스 속성:', Object.keys(databaseInfo.properties).join(', '));
+
+    // 노션 DB 쿼리 (필터 없이 모든 발주 데이터)
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      sorts: [
+        {
+          property: 'OrderDate',
+          direction: 'descending',
+        },
+      ],
+    });
+
+    // 데이터 변환
+    const orderData = response.results.map((page: any) => {
+      const properties = page.properties;
+      
+      // 속성 찾기
+      const orderNumberProperty = findPropertyByTitle(properties, 'OrderNumber', '발주번호', '주문번호');
+      const orderDateProperty = findPropertyByType(properties, 'date', 'OrderDate', '발주일', '발주날짜', '주문일');
+      const supplierProperty = findPropertyByType(properties, 'select', 'Supplier', '공급업체', '업체');
+      const statusProperty = findPropertyByType(properties, 'select', 'Status', '상태', '진행상태');
+      const totalAmountProperty = findPropertyByType(properties, 'number', 'TotalAmount', '총금액', '합계');
+      const itemsProperty = findPropertyByType(properties, 'rich_text', 'Items', '상품', '품목');
+      const trackingNumberProperty = findPropertyByType(properties, 'rich_text', 'TrackingNumber', '추적번호', '송장번호');
+      const notesProperty = findPropertyByType(properties, 'rich_text', 'Notes', '비고', '메모');
+      
+      return {
+        id: page.id,
+        orderNumber: getTitleValue(properties, orderNumberProperty),
+        orderDate: getDateValue(properties, orderDateProperty),
+        supplier: getSelectValue(properties, supplierProperty),
+        status: getSelectValue(properties, statusProperty) || '대기',
+        totalAmount: getNumberValue(properties, totalAmountProperty),
+        items: getRichTextValue(properties, itemsProperty),
+        trackingNumber: getRichTextValue(properties, trackingNumberProperty),
+        notes: getRichTextValue(properties, notesProperty),
+        lastUpdated: page.last_edited_time,
+      };
+    });
+
+    // 캐시 업데이트
+    orderDataCache = {
+      data: orderData,
+      timestamp: Date.now(),
+    };
+
+    console.log(`${orderData.length}개의 발주 데이터 로드 완료`);
+    return orderData;
+  } catch (error) {
+    console.error('발주 데이터 로드 실패:', error);
+    return [];
+  }
+});
+
+// 타이틀 속성 찾기 (titie 타입의 속성 찾기)
+function findPropertyByTitle(properties: any, ...possibleNames: string[]): string | null {
+  for (const key in properties) {
+    if (properties[key].type === 'title' &&
+        (possibleNames.includes(key) || 
+         possibleNames.some(name => key.toLowerCase().includes(name.toLowerCase())))) {
+      return key;
+    }
+  }
+  return null;
+}
+
+// 타이틀 값 가져오기
+function getTitleValue(properties: any, propertyName: string | null): string {
+  if (!propertyName || !properties[propertyName]) return '';
+  return properties[propertyName].title?.[0]?.text?.content || properties[propertyName].title?.[0]?.plain_text || '';
+}
+
+// 날짜 값 가져오기
+function getDateValue(properties: any, propertyName: string | null): string {
+  if (!propertyName || !properties[propertyName]) return '';
+  return properties[propertyName].date?.start || '';
+}
+
+// 선택 값 가져오기
+function getSelectValue(properties: any, propertyName: string | null): string {
+  if (!propertyName || !properties[propertyName]) return '';
+  return properties[propertyName].select?.name || '';
+}
+
+// 발주 상태 업데이트
+export async function updateOrderStatus(orderId: string, newStatus: string) {
+  try {
+    await notion.pages.update({
+      page_id: orderId,
+      properties: {
+        Status: {
+          select: {
+            name: newStatus,
+          },
+        },
+      },
+    });
+    
+    // 캐시 무효화
+    orderDataCache = null;
+    
+    console.log(`발주 상태 업데이트 완료: ${orderId} -> ${newStatus}`);
+    return true;
+  } catch (error) {
+    console.error('발주 상태 업데이트 실패:', error);
+    return false;
+  }
+}
+
+// 캐시 지우기
+export function clearNotionCache() {
+  totalSalesCache = null;
+  orderDataCache = null;
+  console.log('노션 데이터 캐시 초기화 완료');
+} 
