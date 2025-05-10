@@ -851,16 +851,28 @@ export default function DashboardPage() {
                       toggleChannel(data.dataKey);
                     }
                   }}
+                  inactiveColor="#CCCCCC"
+                  payload={
+                    CHANNELS.map(channel => ({
+                      value: getChannelName(channel.id),
+                      id: channel.id,
+                      type: 'square',
+                      color: activeChannels[channel.id] ? channel.color : '#CCCCCC',
+                      dataKey: channel.id,
+                      inactive: !activeChannels[channel.id]
+                    }))
+                  }
                 />
-                {CHANNELS.filter(channel => activeChannels[channel.id]).map(channel => (
-                        <Bar 
-                          key={channel.id}
-                          dataKey={channel.id} 
+                {CHANNELS.map(channel => (
+                  <Bar 
+                    key={channel.id}
+                    dataKey={channel.id} 
                     stackId="a"
-                          name={channel.name}
+                    name={channel.name}
                     fill={channel.color}
-                        />
-                      ))}
+                    hide={!activeChannels[channel.id]}
+                  />
+                ))}
                     </BarChart>
                   </ResponsiveContainer>
           </ChartContainer>
@@ -898,16 +910,28 @@ export default function DashboardPage() {
                       toggleChannel(data.dataKey);
                     }
                   }}
+                  inactiveColor="#CCCCCC"
+                  payload={
+                    CHANNELS.map(channel => ({
+                      value: getChannelName(channel.id),
+                      id: channel.id,
+                      type: 'square',
+                      color: activeChannels[channel.id] ? channel.color : '#CCCCCC',
+                      dataKey: channel.id,
+                      inactive: !activeChannels[channel.id]
+                    }))
+                  }
                 />
-                {CHANNELS.filter(channel => activeChannels[channel.id]).map(channel => (
-                        <Bar 
-                          key={channel.id}
-                          dataKey={channel.id} 
+                {CHANNELS.map(channel => (
+                  <Bar 
+                    key={channel.id}
+                    dataKey={channel.id} 
                     stackId="a"
-                          name={channel.name}
+                    name={channel.name}
                     fill={channel.color}
-                        />
-                      ))}
+                    hide={!activeChannels[channel.id]}
+                  />
+                ))}
                     </BarChart>
                   </ResponsiveContainer>
           </ChartContainer>

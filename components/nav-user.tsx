@@ -16,6 +16,31 @@ import {
 export function NavUser() {
   const router = useRouter()
   const [isLoading, setIsLoading] = React.useState(false)
+  const [userEmail, setUserEmail] = React.useState<string | null>(null)
+  
+  // 사용자 이메일 정보 가져오기
+  React.useEffect(() => {
+    const getUserEmail = async () => {
+      const { data } = await supabase.auth.getSession();
+      const email = data.session?.user?.email || null;
+      setUserEmail(email);
+    };
+    
+    getUserEmail();
+  }, []);
+  
+  // 이메일을 @ 기준으로 분리
+  const emailName = userEmail ? userEmail.split('@')[0] : 'user';
+  const emailDomain = userEmail ? `@${userEmail.split('@')[1]}` : '';
+  
+  // 이메일 앞부분의 첫 글자들을 아바타에 표시
+  const getInitials = (name: string) => {
+    if (!name) return 'U';
+    
+    if (name.length <= 2) return name.toUpperCase();
+    
+    return name.substring(0, 2).toUpperCase();
+  };
   
   const handleLogout = async () => {
     try {
@@ -46,14 +71,14 @@ export function NavUser() {
           className="group flex size-full flex-1 items-center gap-2"
         >
           <Avatar className="size-8 border">
-            <AvatarFallback className="text-xs">AT</AvatarFallback>
+            <AvatarFallback className="text-xs">{getInitials(emailName)}</AvatarFallback>
           </Avatar>
           <div className="grid flex-1 text-left text-sm leading-tight">
             <span className="text-sidebar-foreground/90 truncate font-medium">
-              admin test
+              {emailName}
             </span>
             <span className="text-sidebar-foreground/60 truncate text-xs">
-              test@test.com
+              {emailDomain}
             </span>
           </div>
         </SidebarMenuButton>
