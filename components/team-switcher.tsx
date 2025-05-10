@@ -15,7 +15,7 @@ export function TeamSwitcher() {
           className="h-8 w-auto"
         />
       </div>
-      <span className="text-xs text-muted-foreground">Ver. 1.2.0</span>
+      <span className="text-xs text-muted-foreground group-data-[state=collapsed]/sidebar:hidden">Ver. 2.1.0</span>
     </div>
   )
 }

@@ -980,6 +980,31 @@ export default function DashboardPage() {
                     <TableCell className="text-right">{product.operatingMarginRate}%</TableCell>
                   </TableRow>
                 ))}
+                
+                {/* 합계 행 */}
+                <TableRow className="font-bold border-t-2">
+                  <TableCell colSpan={2}>합계</TableCell>
+                  <TableCell className="text-right">
+                    {formatNumber(productSalesData.reduce((total, product) => total + product.quantity, 0))}개
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(productSalesData.reduce((total, product) => total + product.sales, 0))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(productSalesData.reduce((total, product) => total + product.netProfit, 0))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {(productSalesData.reduce((total, product) => total + product.netProfit, 0) / 
+                     productSalesData.reduce((total, product) => total + product.sales, 0) * 100).toFixed(1)}%
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(productSalesData.reduce((total, product) => total + (product.operatingProfit || 0), 0))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {(productSalesData.reduce((total, product) => total + (product.operatingProfit || 0), 0) / 
+                     productSalesData.reduce((total, product) => total + product.sales, 0) * 100).toFixed(1)}%
+                  </TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           </div>

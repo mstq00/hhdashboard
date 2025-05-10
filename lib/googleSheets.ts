@@ -803,7 +803,7 @@ export async function fetchSheetData(range: string, dateParams?: { startDate?: s
         return [];
       }
       
-      throw error;
+    throw error;
     } finally {
       // 요청 완료 후 pendingRequests에서 제거
       delete pendingRequests[cacheKey];
@@ -1056,7 +1056,7 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
     return updatedSalesData;
   } catch (error) {
     console.error('데이터 로드 오류 발생');
-    return [];
+      return [];
   }
 }
 

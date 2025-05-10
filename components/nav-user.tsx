@@ -66,7 +66,7 @@ export function NavUser() {
   
   return (
     <SidebarMenu>
-      <SidebarMenuItem>
+      <SidebarMenuItem className="group-data-[state=collapsed]/sidebar:hidden">
         <SidebarMenuButton
           className="group flex size-full flex-1 items-center gap-2"
         >
@@ -93,7 +93,7 @@ export function NavUser() {
           ) : (
             <LogOut className="size-4" />
           )}
-          <span>로그아웃</span>
+          <span className="group-data-[state=collapsed]/sidebar:hidden">로그아웃</span>
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>

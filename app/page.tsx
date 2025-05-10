@@ -3,7 +3,6 @@
 import { LoginForm } from "@/components/login-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Image from "next/image"
-import { Button } from "@/components/ui/button"
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -82,17 +81,16 @@ export default function Home() {
           <div className="text-xl font-medium text-gray-600 mb-2">{formattedDate}</div>
         </div>
 
-        <Image
-          src="/hejdoohomelogo.png"
-          alt="헤이두 홈 로고"
-          width={150}
-          height={50}
-          className="h-12 w-auto"
-          priority
-        />
-
         <Card className="w-full shadow-lg">
           <CardHeader className="space-y-1 items-center text-center">
+            <Image
+              src="/hejdoohomelogo.png"
+              alt="헤이두 홈 로고"
+              width={150}
+              height={50}
+              className="h-12 w-auto mb-4"
+              priority
+            />
             <CardTitle className="text-2xl font-semibold tracking-tight">
               로그인
             </CardTitle>
@@ -104,19 +102,6 @@ export default function Home() {
             <LoginForm />
           </CardContent>
         </Card>
-
-        <div className="mt-4">
-          <p className="mb-2 text-sm text-gray-500">
-            로그인 후 대시보드로 이동하지 않는 경우 아래 버튼을 클릭하세요:
-          </p>
-          <Button 
-            onClick={() => window.location.href = '/dashboard?skip_auth=true'}
-            variant="outline"
-            size="sm"
-          >
-            대시보드로 직접 이동
-          </Button>
-        </div>
       </div>
     </div>
   )
