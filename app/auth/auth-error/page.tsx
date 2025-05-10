@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
-export default function AuthErrorPage() {
+// 실제 컨텐츠를 표시하는 클라이언트 컴포넌트
+function AuthErrorContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [reason, setReason] = useState<string>("");
@@ -77,5 +78,33 @@ export default function AuthErrorPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// 로딩 상태를 표시하는 컴포넌트
+function LoadingFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <Card className="w-[90%] max-w-md shadow-lg">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold text-center">로딩 중...</CardTitle>
+          <CardDescription className="text-center">
+            인증 정보를 확인하고 있습니다
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center p-6">
+          <div className="w-8 h-8 border-4 border-t-transparent border-primary animate-spin rounded-full"></div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// 메인 페이지 컴포넌트
+export default function AuthErrorPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <AuthErrorContent />
+    </Suspense>
   );
 } 
