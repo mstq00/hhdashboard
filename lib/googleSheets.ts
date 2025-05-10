@@ -709,18 +709,18 @@ export async function fetchSheetData(range: string, dateParams?: { startDate?: s
   
   // 캐시된 데이터가 있으면 반환
   if (cache[cacheKey] && Date.now() < cache[cacheKey].expiry) {
-    console.log(`캐시에서 데이터 반환: ${range}`);
+    // 로그 간소화 - 모바일에서의 부담 감소
     return cache[cacheKey].data;
   }
   
   // 진행 중인 요청이 있는지 확인
   let pendingRequest = pendingRequests[cacheKey];
   if (pendingRequest) {
-    console.log(`진행 중인 요청 재사용: ${range}`);
+    // 로그 간소화
     return pendingRequest;
   }
   
-  console.log(`API에서 데이터 가져오기: ${range}`);
+  console.log(`데이터 로드 중: ${range.split('!')[0]}`);
   
   // 새 요청 생성
   pendingRequest = (async () => {
@@ -734,10 +734,9 @@ export async function fetchSheetData(range: string, dateParams?: { startDate?: s
                      process.env.GOOGLE_API_KEY || 
                      hardcodedApiKey;
       
-      console.log('API 키 확인:', !!apiKey, typeof apiKey);
-      
+      // 로그 간소화
       if (!apiKey) {
-        throw new Error('Google API 키가 설정되지 않았습니다. .env.local 파일에 NEXT_PUBLIC_GOOGLE_API_KEY를 추가해주세요.');
+        throw new Error('Google API 키가 설정되지 않았습니다.');
       }
       
       // 스프레드시트 ID 확인 - 임시 하드코딩 지원
@@ -748,37 +747,59 @@ export async function fetchSheetData(range: string, dateParams?: { startDate?: s
         throw new Error('스프레드시트 ID가 설정되지 않았습니다.');
       }
       
-      console.log('API 키 및 시트 ID 확인됨:', !!apiKey, !!sheetId);
-      
       // 기본 URL
       let url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`;
       
       // 날짜 필터링은 클라이언트 측에서 처리하므로 API URL에 추가하지 않음
       
-      const response = await fetch(url);
+      // 타임아웃 적용 - 모바일 환경에서의 안정성 향상
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30초 타임아웃
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API 응답 오류 (${response.status}): ${errorText}`);
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          // 캐시 제어를 통한 안정성 향상
+          cache: 'no-store'
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API 응답 오류 (${response.status}): ${errorText}`);
+        }
+        
+        const data = await response.json();
+        const values = data.values || [];
+        
+        // 캐시에 결과 저장
+        cache[cacheKey] = {
+          data: values,
+          expiry: Date.now() + CACHE_TTL
+        };
+        
+        console.log(`${range.split('!')[0]} 로드 완료: ${values.length}행`);
+        return values;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        throw fetchError;
+      }
+    } catch (error: any) {
+      // 오류 로깅 간소화
+      let errorMessage = '데이터 로드 오류';
+      
+      if (error.name === 'AbortError') {
+        errorMessage = '요청 시간 초과';
+      } else if (error.message) {
+        errorMessage = error.message;
       }
       
-      const data = await response.json();
-      const values = data.values || [];
-      
-      // 캐시에 결과 저장
-      cache[cacheKey] = {
-        data: values,
-        expiry: Date.now() + CACHE_TTL
-      };
-      
-      return values;
-    } catch (error: any) {
-      // 오류 로깅
-      console.error(`시트 데이터 가져오기 오류 (${range}):`, error.message || error);
+      console.error(`${range.split('!')[0]} 오류: ${errorMessage}`);
       
       // 할당량 초과 오류 특별 처리
       if (error.message && error.message.includes('429')) {
-        console.error('Google Sheets API 할당량 초과. 잠시 후 다시 시도하세요.');
+        console.error('API 할당량 초과. 잠시 후 다시 시도하세요.');
         return [];
       }
       
@@ -806,14 +827,11 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
     
     // 캐시된 데이터가 있으면 반환
     if (cache[cacheKey] && Date.now() < cache[cacheKey].expiry) {
-      console.log(`캐시에서 판매 데이터 반환 (${cache[cacheKey].data.length}개 항목)`);
+      // 로그 간소화
       return cache[cacheKey].data;
     }
     
-    console.log('판매 데이터 새로 가져오는 중...');
-    if (startDate && endDate) {
-      console.log(`지정된 날짜 범위: ${startDate.toLocaleDateString()} ~ ${endDate.toLocaleDateString()}`);
-    }
+    console.log('데이터 로드 중...');
     
     // 판매 데이터 관련 정보 가져오기 (병렬 처리)
     const [productInfoData, commissions, channelPricingData, sheetMappings] = await Promise.all([
@@ -823,9 +841,7 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
       fetchSheetMappingsFromDatabase()
     ]);
     
-    console.log(`${Object.keys(commissions).length}개 채널 수수료 정보 로드됨`);
-    console.log(`${channelPricingData.length}개 채널별 가격 정보 로드됨`);
-    console.log(`${sheetMappings.length}개 시트 매핑 정보 로드됨`);
+    // 로그 간소화
     
     // 가격 정보 맵 생성
     const priceInfoMap = new Map<string, { price: number, fee: number, supplyPrice: number }>();
@@ -884,11 +900,16 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
         }
       ];
       
+      // 모바일 환경에서 안정성을 위해 지연 시간 증가
+      const delayBetweenRequests = 1500; // 1.5초
+      
+      // 모바일 환경 최적화: 한 번에 모든 시트를 처리하는 대신 한 번에 하나씩 처리
       for (const sheet of sheets) {
         try {
+          console.log(`${sheet.name.split('!')[0]} 데이터 로드 중...`);
+          
           // 날짜 범위 정보는 따로 전달하지 않음
           const sheetData = await fetchSheetData(sheet.name);
-          console.log(`${sheet.name} 데이터 가져오기 성공 (${sheetData.length}행)`);
           
           const exclusions = allSalesData.map(item => item.orderNumber);
           
@@ -903,24 +924,24 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
           // 서버에서 날짜 필터링 대신 클라이언트에서 필터링
           if (startDate && endDate) {
             processedData = filterDataByDateRange(processedData, startDate, endDate);
-            console.log(`${sheet.name.split('!')[0]} 필터링 후 데이터: ${processedData.length}행`);
+            console.log(`${sheet.name.split('!')[0]}: ${processedData.length}개 항목 필터링됨`);
           }
           
           allSalesData.push(...processedData);
           
           // API 요청 사이에 지연 추가
-          await sleep(1000);
+          await sleep(delayBetweenRequests);
         } catch (error) {
-          console.error(`${sheet.name} 데이터 가져오기 실패:`, error);
+          console.error(`${sheet.name.split('!')[0]} 로드 실패`);
           // 개별 시트 실패해도 계속 진행
         }
       }
     } catch (error) {
-      console.error('시트 데이터 가져오기 중 오류 발생:', error);
+      console.error('데이터 로드 중 오류 발생');
       // 일부 시트 데이터라도 처리 계속
     }
     
-    console.log(`모든 시트에서 총 ${allSalesData.length}개 판매 데이터 가져옴`);
+    console.log(`총 ${allSalesData.length}개 항목 로드됨`);
     
     // 상품 정보 적용
     let mappingAttemptCount = 0;
@@ -930,13 +951,7 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
       // 매핑 시도 횟수 증가
       mappingAttemptCount++;
       
-      // 매핑 시도 로그 (간소화)
-      const shouldLogDetail = logMappingAttempt(
-        mappingAttemptCount, 
-        item.channel, 
-        item.productName, 
-        item.optionName || ''
-      );
+      // 매핑 시도 로그 제거 (모바일 성능 향상을 위해)
       
       // 매핑 시도
       let mapping = findMapping(sheetMappings, item.productName, item.optionName);
@@ -951,10 +966,10 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
           item.matchingStatus = '매칭 성공';
           
           // 채널별 가격 정보 가져오기
-          // 대소문자 관계없이 채널 이름 일치하는지 확인 (스마트스토어, ohouse 등)
+          // 대소문자 관계없이 채널 이름 일치하는지 확인
           const normalizedChannel = item.channel.toLowerCase();
           
-          // 채널명 정규화 (smartstore, ohouse 등으로 변환)
+          // 채널명 정규화
           const standardizedChannel = 
             normalizedChannel.includes('스마트') ? 'smartstore' :
             normalizedChannel.includes('오늘의집') || normalizedChannel.includes('오늘') || normalizedChannel.includes('ohouse') ? 'ohouse' :
@@ -1030,8 +1045,7 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
       return item;
     });
     
-    // 매치 성공률 로그
-    console.log(`매핑 성공 비율: ${matchingSuccessCount}/${mappingAttemptCount} (${(matchingSuccessCount / mappingAttemptCount * 100).toFixed(1)}%)`);
+    // 매치 성공률 로그 간소화
     
     // 캐시에 데이터 저장 (1시간 유효)
     cache[cacheKey] = {
@@ -1041,7 +1055,7 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
     
     return updatedSalesData;
   } catch (error) {
-    console.error('판매 데이터 가져오기 오류:', error);
+    console.error('데이터 로드 오류 발생');
     return [];
   }
 }

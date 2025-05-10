@@ -317,6 +317,9 @@ export default function DashboardPage() {
     CHANNELS.reduce((acc, channel) => ({ ...acc, [channel.id]: true }), {})
   );
   
+  // 로딩 오류 상태 추가
+  const [loadError, setLoadError] = useState<string | null>(null);
+  
   // 디바운스된 날짜 범위 (API 호출 최적화)
   const debouncedDateRange = useDebounce(dateRange, 500);
   
@@ -325,17 +328,33 @@ export default function DashboardPage() {
     if (!from || !to) return;
     
     try {
-      console.log(`${from.toLocaleDateString()} ~ ${to.toLocaleDateString()} 범위의 데이터 로드 중...`);
+      // 오류 상태 초기화
+      setLoadError(null);
       setIsLoading(true);
+      
+      // 최적화: 데이터 로드 시작 시간 기록
+      const startTime = Date.now();
       
       // 선택된 기간에 대한 데이터만 로드
       const salesData = await fetchAllSalesData(from, to);
-      console.log(`${salesData.length}개 판매 데이터 로드 완료`);
+      
+      // 데이터 로딩 시간이 너무 오래 걸리면 오래 걸린다는 메시지를 로그에 남김
+      const loadTime = Date.now() - startTime;
+      if (loadTime > 5000) {
+        console.log(`데이터 로드에 ${Math.round(loadTime / 1000)}초 소요됨`);
+      }
+      
+      if (salesData.length === 0) {
+        console.log('로드된 데이터가 없습니다.');
+      } else {
+        console.log(`${salesData.length}개 데이터 로드됨`);
+      }
       
       setRawSalesData(salesData);
       setIsLoading(false);
     } catch (error) {
       console.error('데이터 로딩 오류:', error);
+      setLoadError('데이터를 불러오는 중 오류가 발생했습니다.');
       setIsLoading(false);
     }
   }, []);
@@ -360,6 +379,9 @@ export default function DashboardPage() {
     
     try {
       setIsLoading(true);
+      
+      // 처리 시작 시간 기록
+      const processStartTime = Date.now();
       
       // 유효한 주문 상태만 필터링 (rawSalesData는 이미 날짜로 필터링됨)
       const validSalesData = filterValidSalesData(rawSalesData);
@@ -392,11 +414,17 @@ export default function DashboardPage() {
         previousEnd.setDate(previousEnd.getDate() - 1);
       }
       
-      // 이전 기간 데이터를 별도로 불러옴
+      // 이전 기간 데이터를 별도로 불러옴 (최적화: 비동기 처리)
       loadPreviousPeriodData(previousStart, previousEnd, validSalesData);
       
+      // 데이터 처리 시간 로깅
+      const processTime = Date.now() - processStartTime;
+      if (processTime > 2000) {
+        console.log(`데이터 처리에 ${Math.round(processTime / 1000)}초 소요됨`);
+      }
     } catch (error) {
       console.error('데이터 필터링 오류:', error);
+      setLoadError('데이터 처리 중 오류가 발생했습니다.');
       setIsLoading(false);
     }
   }, [rawSalesData, dateRange]);
@@ -408,35 +436,46 @@ export default function DashboardPage() {
       const previousPeriodData = await fetchAllSalesData(previousStart, previousEnd);
       const validPreviousSalesData = filterValidSalesData(previousPeriodData);
       
+      // 모바일 최적화: 처리를 청크로 나눔 (1ms 지연 함수)
+      const microDelay = () => new Promise(resolve => setTimeout(resolve, 1));
+      
       // 제품별 매출 집계
+      await microDelay();
       const aggregatedProductSales = aggregateProductSales(currentPeriodData);
       setProductSalesData(aggregatedProductSales);
       
       // 채널별 매출 집계
+      await microDelay();
       const aggregatedChannelSales = aggregateChannelSales(currentPeriodData);
       setChannelSalesData(aggregatedChannelSales);
       
       // 기간별 매출 데이터 (일간/주간/월간)
+      await microDelay();
       const periodData = generatePeriodSalesData(currentPeriodData, periodType);
       setPeriodSalesData(periodData);
       
       // 요일별 매출 데이터
+      await microDelay();
       const dayOfWeekData = generateDayOfWeekSalesData(currentPeriodData);
       setDayOfWeekSalesData(dayOfWeekData);
       
       // 주문 및 고객 수 계산
+      await microDelay();
       const currentCounts = calculateOrderAndCustomerCounts(currentPeriodData);
       const previousCounts = calculateOrderAndCustomerCounts(validPreviousSalesData);
       
       // 재구매 통계 (현재 기간)
+      await microDelay();
       const repurchaseStats = calculateRepurchaseStats(currentPeriodData);
       
       // 현재 기간 총 매출
+      await microDelay();
       const currentTotalSales = currentPeriodData.reduce((sum, item) => {
         return sum + (item.totalSales || (item.price * item.quantity) || 0);
       }, 0);
       
       // 이전 기간 총 매출
+      await microDelay();
       const previousTotalSales = validPreviousSalesData.reduce((sum, item) => {
         return sum + (item.totalSales || (item.price * item.quantity) || 0);
       }, 0);
@@ -473,6 +512,7 @@ export default function DashboardPage() {
       setIsLoading(false);
     } catch (error) {
       console.error('이전 기간 데이터 처리 오류:', error);
+      setLoadError('비교 데이터 처리 중 오류가 발생했습니다.');
       setIsLoading(false);
     }
   };
@@ -481,8 +521,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!filteredData.length) return;
     
-    const newPeriodData = generatePeriodSalesData(filteredData, periodType);
-    setPeriodSalesData(newPeriodData);
+    try {
+      const newPeriodData = generatePeriodSalesData(filteredData, periodType);
+      setPeriodSalesData(newPeriodData);
+    } catch (error) {
+      console.error('기간별 데이터 생성 오류:', error);
+    }
   }, [filteredData, periodType]);
   
   // 기간 빠른 선택 버튼 핸들러
@@ -650,11 +694,32 @@ export default function DashboardPage() {
       {isLoading && (
         <div className="flex justify-center items-center py-6 sm:py-8">
           <Loader2 className="h-6 w-6 sm:size-8 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-sm text-muted-foreground">데이터 로드 중...</span>
+        </div>
+      )}
+      
+      {/* 오류 메시지 */}
+      {loadError && !isLoading && (
+        <div className="p-4 my-4 bg-red-50 border border-red-200 rounded-md text-red-600">
+          <p className="text-center">{loadError}</p>
+          <p className="text-center text-sm mt-2">
+            다시 시도하려면 페이지를 새로고침하거나 다른 날짜 범위를 선택하세요.
+          </p>
+        </div>
+      )}
+      
+      {/* 데이터 없음 메시지 */}
+      {!isLoading && !loadError && rawSalesData.length === 0 && (
+        <div className="p-4 my-4 bg-blue-50 border border-blue-200 rounded-md text-blue-600">
+          <p className="text-center">선택한 기간에 데이터가 없습니다.</p>
+          <p className="text-center text-sm mt-2">
+            다른 날짜 범위를 선택하거나 데이터가 있는지 확인하세요.
+          </p>
         </div>
       )}
       
       {/* 주요 지표 카드 */}
-      {!isLoading && summaryData && (
+      {!isLoading && !loadError && summaryData && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mt-3 sm:mt-4">
           {/* 총 매출 카드 */}
             <Card>
@@ -716,7 +781,7 @@ export default function DashboardPage() {
       )}
 
           {/* 차트 영역 */}
-      {!isLoading && periodSalesData.length > 0 && dayOfWeekSalesData.length > 0 && (
+      {!isLoading && !loadError && periodSalesData.length > 0 && dayOfWeekSalesData.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
           {/* 기간별 매출 차트 */}
           <ChartContainer
@@ -850,7 +915,7 @@ export default function DashboardPage() {
       )}
       
       {/* 제품별 판매 데이터 */}
-      {!isLoading && productSalesData && productSalesData.length > 0 && (
+      {!isLoading && !loadError && productSalesData && productSalesData.length > 0 && (
         <ChartContainer
           title="제품별 판매 데이터"
           description="각 제품의 판매량과 매출 현황을 확인할 수 있습니다."
@@ -898,7 +963,7 @@ export default function DashboardPage() {
       )}
       
       {/* 판매처별 판매현황 섹션 */}
-      {!isLoading && channelSalesData && channelSalesData.length > 0 && (
+      {!isLoading && !loadError && channelSalesData && channelSalesData.length > 0 && (
         <ChartContainer
           title="판매처별 판매현황"
           description="각 판매 채널별 매출 비중을 확인할 수 있습니다."
