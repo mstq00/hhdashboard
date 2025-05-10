@@ -63,6 +63,28 @@ import {
 // 유틸리티 함수 import
 import { formatCurrency, formatNumber } from "@/lib/utils/numberUtils";
 
+// 판매 데이터 인터페이스 정의
+interface SalesItem {
+  channel: string;
+  orderNumber: string;
+  orderDate: string | null;
+  customerName: string;
+  customerID: string;
+  productName: string;
+  optionName: string;
+  quantity: number;
+  price: number;
+  commissionRate: number;
+  commissionAmount: number;
+  netProfit: number;
+  status: string;
+  matchingStatus?: string;
+  marginRate?: string;
+  operatingProfit?: number;
+  operatingMarginRate?: string;
+  totalSales?: number;
+}
+
 // 유틸 함수들
 const getGrowthClass = (growth: number) => {
   return growth > 0 ? 'text-emerald-600' : growth < 0 ? 'text-red-600' : 'text-gray-500';
@@ -171,7 +193,7 @@ const ChartTooltip = ({ active, payload, label, formatter, labelFormatter }: any
           <span className="font-medium">
             {formatter ? formatter(entry.value, entry.name) : entry.value}
           </span>
-        </div>
+          </div>
       ))}
       {payload.length > 1 && (
         <div className="mt-2 pt-2 border-t border-gray-200">
@@ -298,39 +320,49 @@ export default function DashboardPage() {
   // 디바운스된 날짜 범위 (API 호출 최적화)
   const debouncedDateRange = useDebounce(dateRange, 500);
   
-  // 초기 데이터 로딩
-  useEffect(() => {
-    async function loadInitialData() {
-      try {
-        setIsLoading(true);
-        const allSalesData = await fetchAllSalesData();
-        setRawSalesData(allSalesData);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('초기 데이터 로딩 오류:', error);
-        setIsLoading(false);
-      }
-    }
+  // 날짜 범위를 이용한 데이터 로드 함수
+  const loadDataForDateRange = useCallback(async (from?: Date, to?: Date) => {
+    if (!from || !to) return;
     
-    loadInitialData();
+    try {
+      console.log(`${from.toLocaleDateString()} ~ ${to.toLocaleDateString()} 범위의 데이터 로드 중...`);
+      setIsLoading(true);
+      
+      // 선택된 기간에 대한 데이터만 로드
+      const salesData = await fetchAllSalesData(from, to);
+      console.log(`${salesData.length}개 판매 데이터 로드 완료`);
+      
+      setRawSalesData(salesData);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('데이터 로딩 오류:', error);
+      setIsLoading(false);
+    }
   }, []);
   
-  // 날짜 범위에 따른 데이터 필터링
+  // 초기 데이터 로딩 (컴포넌트 마운트 시 한 번)
+  useEffect(() => {
+    if (dateRange?.from && dateRange?.to) {
+      loadDataForDateRange(dateRange.from, dateRange.to);
+    }
+  }, []);
+  
+  // 디바운스된 날짜 범위가 변경되면 데이터 다시 로드
+  useEffect(() => {
+    if (debouncedDateRange?.from && debouncedDateRange?.to) {
+      loadDataForDateRange(debouncedDateRange.from, debouncedDateRange.to);
+    }
+  }, [debouncedDateRange, loadDataForDateRange]);
+  
+  // 날짜 범위에 따른 데이터 필터링 및 계산
   useEffect(() => {
     if (!rawSalesData.length || !dateRange?.from || !dateRange?.to) return;
     
     try {
       setIsLoading(true);
       
-      // 날짜 범위로 필터링
-      const dateFilteredData = filterDataByDateRange(
-        rawSalesData, 
-        dateRange.from, 
-        dateRange.to
-      );
-      
-      // 유효한 주문 상태만 필터링
-      const validSalesData = filterValidSalesData(dateFilteredData);
+      // 유효한 주문 상태만 필터링 (rawSalesData는 이미 날짜로 필터링됨)
+      const validSalesData = filterValidSalesData(rawSalesData);
       setFilteredData(validSalesData);
       
       // 현재 기간과 이전 기간 계산
@@ -360,40 +392,47 @@ export default function DashboardPage() {
         previousEnd.setDate(previousEnd.getDate() - 1);
       }
       
-      // 이전 기간 데이터 필터링
-      const previousDateFilteredData = filterDataByDateRange(
-        rawSalesData, 
-        previousStart, 
-        previousEnd
-      );
+      // 이전 기간 데이터를 별도로 불러옴
+      loadPreviousPeriodData(previousStart, previousEnd, validSalesData);
       
-      const validPreviousSalesData = filterValidSalesData(previousDateFilteredData);
+    } catch (error) {
+      console.error('데이터 필터링 오류:', error);
+      setIsLoading(false);
+    }
+  }, [rawSalesData, dateRange]);
+  
+  // 이전 기간 데이터 로드 및 처리
+  const loadPreviousPeriodData = async (previousStart: Date, previousEnd: Date, currentPeriodData: SalesItem[]) => {
+    try {
+      // 이전 기간 데이터 로드
+      const previousPeriodData = await fetchAllSalesData(previousStart, previousEnd);
+      const validPreviousSalesData = filterValidSalesData(previousPeriodData);
       
       // 제품별 매출 집계
-      const aggregatedProductSales = aggregateProductSales(validSalesData);
+      const aggregatedProductSales = aggregateProductSales(currentPeriodData);
       setProductSalesData(aggregatedProductSales);
       
       // 채널별 매출 집계
-      const aggregatedChannelSales = aggregateChannelSales(validSalesData);
+      const aggregatedChannelSales = aggregateChannelSales(currentPeriodData);
       setChannelSalesData(aggregatedChannelSales);
       
       // 기간별 매출 데이터 (일간/주간/월간)
-      const periodData = generatePeriodSalesData(validSalesData, periodType);
+      const periodData = generatePeriodSalesData(currentPeriodData, periodType);
       setPeriodSalesData(periodData);
       
       // 요일별 매출 데이터
-      const dayOfWeekData = generateDayOfWeekSalesData(validSalesData);
+      const dayOfWeekData = generateDayOfWeekSalesData(currentPeriodData);
       setDayOfWeekSalesData(dayOfWeekData);
       
       // 주문 및 고객 수 계산
-      const currentCounts = calculateOrderAndCustomerCounts(validSalesData);
+      const currentCounts = calculateOrderAndCustomerCounts(currentPeriodData);
       const previousCounts = calculateOrderAndCustomerCounts(validPreviousSalesData);
       
       // 재구매 통계 (현재 기간)
-      const repurchaseStats = calculateRepurchaseStats(validSalesData);
+      const repurchaseStats = calculateRepurchaseStats(currentPeriodData);
       
       // 현재 기간 총 매출
-      const currentTotalSales = validSalesData.reduce((sum, item) => {
+      const currentTotalSales = currentPeriodData.reduce((sum, item) => {
         return sum + (item.totalSales || (item.price * item.quantity) || 0);
       }, 0);
       
@@ -433,10 +472,10 @@ export default function DashboardPage() {
       
       setIsLoading(false);
     } catch (error) {
-      console.error('데이터 필터링 오류:', error);
+      console.error('이전 기간 데이터 처리 오류:', error);
       setIsLoading(false);
     }
-  }, [rawSalesData, debouncedDateRange, periodType]);
+  };
   
   // 기간 타입 변경 시 차트 데이터 업데이트
   useEffect(() => {
@@ -521,7 +560,7 @@ export default function DashboardPage() {
     
     return `${format(dateRange.from, 'PPP', { locale: ko })} ~ ${format(dateRange.to, 'PPP', { locale: ko })}`;
   }, [dateRange]);
-  
+
   return (
     <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 pb-16">
       {/* 기간 선택 섹션 */}
@@ -531,70 +570,70 @@ export default function DashboardPage() {
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <div className="flex gap-1 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
+          <Button
+            variant="outline"
+            size="sm"
               className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
               onClick={() => handleQuickPeriod('today')}
-            >
-              오늘
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
+          >
+            오늘
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
               className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
               onClick={() => handleQuickPeriod('yesterday')}
-            >
-              어제
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
+          >
+            어제
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
               className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
               onClick={() => handleQuickPeriod('7days')}
-            >
+          >
               7일
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
               className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
               onClick={() => handleQuickPeriod('this-month')}
-            >
+          >
               이번달
-            </Button>
-            <Button
-              variant="outline" 
-              size="sm"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
               className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
               onClick={() => handleQuickPeriod('last-month')}
-            >
+          >
               지난달
-            </Button>
-            <Button
-              variant="outline" 
-              size="sm"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
               className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
               onClick={() => handleQuickPeriod('3months')}
-            >
+          >
               이전 3개월
-            </Button>
-            <Button
-              variant="outline" 
-              size="sm"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
               className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
               onClick={() => handleQuickPeriod('6months')}
-            >
+          >
               이전 6개월
-            </Button>
-            <Button
-              variant="outline" 
-              size="sm"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
               className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
               onClick={() => handleQuickPeriod('all')}
-            >
+          >
               전체
-            </Button>
+          </Button>
           </div>
           <div className="w-full sm:w-auto">
             <DateRangePicker
@@ -606,7 +645,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-      
+
       {/* 로딩 표시 */}
       {isLoading && (
         <div className="flex justify-center items-center py-6 sm:py-8">
@@ -618,7 +657,7 @@ export default function DashboardPage() {
       {!isLoading && summaryData && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mt-3 sm:mt-4">
           {/* 총 매출 카드 */}
-          <Card>
+            <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex justify-between">
                 <div>
@@ -632,12 +671,12 @@ export default function DashboardPage() {
               </div>
               <div className="text-xs text-muted-foreground mt-2 sm:mt-3 break-words">
                 이전 기간 ({format(summaryData.previousPeriod.start, 'yyyy.MM.dd', { locale: ko })} ~ {format(summaryData.previousPeriod.end, 'yyyy.MM.dd', { locale: ko })}): {formatCurrency(summaryData.salesPrevious)}
-              </div>
-            </CardContent>
-          </Card>
-          
+                </div>
+              </CardContent>
+            </Card>
+
           {/* 총 구매자 수 카드 */}
-          <Card>
+            <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex justify-between">
                 <div>
@@ -651,12 +690,12 @@ export default function DashboardPage() {
               </div>
               <div className="text-xs text-muted-foreground mt-2 sm:mt-3 break-words">
                 이전 기간 ({format(summaryData.previousPeriod.start, 'yyyy.MM.dd', { locale: ko })} ~ {format(summaryData.previousPeriod.end, 'yyyy.MM.dd', { locale: ko })}): {formatNumber(summaryData.customerPrevious)}명
-              </div>
-            </CardContent>
-          </Card>
-          
+                </div>
+              </CardContent>
+            </Card>
+
           {/* 총 구매 건수 카드 */}
-          <Card>
+            <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex justify-between">
                 <div>
@@ -670,13 +709,13 @@ export default function DashboardPage() {
               </div>
               <div className="text-xs text-muted-foreground mt-2 sm:mt-3 break-words">
                 이전 기간 ({format(summaryData.previousPeriod.start, 'yyyy.MM.dd', { locale: ko })} ~ {format(summaryData.previousPeriod.end, 'yyyy.MM.dd', { locale: ko })}): {formatNumber(summaryData.orderPrevious)}건
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
       )}
-      
-      {/* 차트 영역 */}
+
+          {/* 차트 영역 */}
       {!isLoading && periodSalesData.length > 0 && dayOfWeekSalesData.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
           {/* 기간별 매출 차트 */}
@@ -685,43 +724,43 @@ export default function DashboardPage() {
             description="선택한 기간 동안의 매출 추이를 채널별로 확인할 수 있습니다."
             actions={
               <div className="flex items-center space-x-1 sm:space-x-2">
-                <Button 
+                  <Button
                   variant={periodType === 'daily' ? 'default' : 'outline'} 
-                  size="sm"
+                    size="sm"
                   className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
                   onClick={() => setPeriodType('daily')}
-                >
+                  >
                   일간
-                </Button>
-                <Button 
+                  </Button>
+                  <Button
                   variant={periodType === 'weekly' ? 'default' : 'outline'} 
-                  size="sm"
+                    size="sm"
                   className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
                   onClick={() => setPeriodType('weekly')}
-                >
+                  >
                   주간
-                </Button>
-                <Button 
+                  </Button>
+                  <Button
                   variant={periodType === 'monthly' ? 'default' : 'outline'} 
-                  size="sm"
+                    size="sm"
                   className="text-xs px-2 py-1 h-7 sm:h-9 sm:text-sm"
                   onClick={() => setPeriodType('monthly')}
-                >
+                  >
                   월간
-                </Button>
-              </div>
+                  </Button>
+                </div>
             }
           >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={periodSalesData}
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={periodSalesData}
                 margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                 barGap={0}
                 barCategoryGap="30%"
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
-                <XAxis 
-                  dataKey="period" 
+                      <XAxis 
+                        dataKey="period" 
                   tick={{ fontSize: 11 }}
                   tickFormatter={(value) => {
                     try {
@@ -749,16 +788,16 @@ export default function DashboardPage() {
                   }}
                 />
                 {CHANNELS.filter(channel => activeChannels[channel.id]).map(channel => (
-                  <Bar 
-                    key={channel.id}
-                    dataKey={channel.id}
+                        <Bar 
+                          key={channel.id}
+                          dataKey={channel.id} 
                     stackId="a"
-                    name={channel.name}
+                          name={channel.name}
                     fill={channel.color}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
+                        />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
           </ChartContainer>
           
           {/* 요일별 매출 분석 */}
@@ -766,9 +805,9 @@ export default function DashboardPage() {
             title="요일별 매출 분석"
             description="요일별 판매 패턴을 분석하여 마케팅 전략을 수립하는 데 활용하세요."
           >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={dayOfWeekSalesData}
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={dayOfWeekSalesData}
                 margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                 barGap={0}
                 barCategoryGap="30%"
@@ -796,16 +835,16 @@ export default function DashboardPage() {
                   }}
                 />
                 {CHANNELS.filter(channel => activeChannels[channel.id]).map(channel => (
-                  <Bar 
-                    key={channel.id}
-                    dataKey={channel.id}
+                        <Bar 
+                          key={channel.id}
+                          dataKey={channel.id} 
                     stackId="a"
-                    name={channel.name}
+                          name={channel.name}
                     fill={channel.color}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
+                        />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
           </ChartContainer>
         </div>
       )}
@@ -898,15 +937,15 @@ export default function DashboardPage() {
             
             {/* 테이블 영역 */}
             <div className="w-full md:w-1/2">
-              <Table>
-                <TableHeader>
-                  <TableRow>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
                     <TableHead>판매처</TableHead>
                     <TableHead className="text-right">매출액</TableHead>
                     <TableHead className="text-right">비율</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                   {channelSalesData.map((channel, i) => (
                     <TableRow key={i}>
                       <TableCell>
@@ -917,12 +956,12 @@ export default function DashboardPage() {
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(channel.sales)}</TableCell>
                       <TableCell className="text-right">{channel.percentage.toFixed(1)}%</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                </div>
         </ChartContainer>
       )}
     </div>

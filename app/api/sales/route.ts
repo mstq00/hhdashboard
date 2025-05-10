@@ -72,18 +72,18 @@ export async function GET(request: Request) {
       const salesData = await googleSheets.fetchAllSalesData();
       
       // 데이터가 없는 경우 빈 응답 반환 (데모 데이터 사용 안함)
-      if (!salesData || salesData.length === 0) {
+    if (!salesData || salesData.length === 0) {
         log('판매 데이터가 없습니다. 빈 데이터 반환');
-        return NextResponse.json({
+      return NextResponse.json({
           ...getEmptyResponseData(periodType),
-          debug: {
-            error: false,
-            message: '판매 데이터가 없음',
+        debug: {
+          error: false,
+          message: '판매 데이터가 없음',
             timestamp: new Date().toISOString()
-          }
-        });
-      }
-      
+        }
+      });
+    }
+    
       // 유효한 주문 상태만 필터링
       const validSalesData = googleSheets.filterValidSalesData(salesData);
       log(`유효한 주문 상태의 데이터: ${validSalesData.length}/${salesData.length}`);
@@ -271,8 +271,8 @@ export async function GET(request: Request) {
           : (item.price * item.quantity);
         return sum + itemSales;
       }, 0);
-      
-      // 주문 및 고객 수 계산
+    
+    // 주문 및 고객 수 계산
       const counts = googleSheets.calculateOrderAndCustomerCounts(currentPeriodData);
       const orderCount = counts.totalOrders;
       const customerCount = counts.totalCustomers;
@@ -287,7 +287,7 @@ export async function GET(request: Request) {
       const customerGrowth = previousCustomerCount > 0 ? Math.round(((customerCount - previousCustomerCount) / previousCustomerCount) * 100) : 0;
       
       // 응답 데이터 구성
-      const responseData = {
+    const responseData = {
         totalSales,
         previousSales,
         salesGrowth,
@@ -297,21 +297,21 @@ export async function GET(request: Request) {
         customerCount,
         previousCustomerCount,
         customerGrowth,
-        productSalesData,
-        channelSalesData,
-        periodSalesData,
-        dayOfWeekSalesData,
-        repurchaseStats,
+      productSalesData,
+      channelSalesData,
+      periodSalesData,
+      dayOfWeekSalesData,
+      repurchaseStats,
         periodType,
-        summaryData: {
-          sales: totalSales,
-          salesGrowth,
-          salesPrevious: previousSales,
-          orderCount,
-          orderGrowth,
+      summaryData: {
+        sales: totalSales,
+        salesGrowth,
+        salesPrevious: previousSales,
+        orderCount,
+        orderGrowth,
           orderPrevious: previousOrderCount,
-          customerCount,
-          customerGrowth,
+        customerCount,
+        customerGrowth,
           customerPrevious: previousCustomerCount
         },
         debug: {
@@ -325,7 +325,7 @@ export async function GET(request: Request) {
         }
       };
       
-      return NextResponse.json(responseData);
+    return NextResponse.json(responseData);
     } catch (error: any) {
       console.error('데이터 처리 중 오류 발생:', error.message);
       

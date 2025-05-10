@@ -698,8 +698,14 @@ const cache: Record<string, CacheItem<any>> = {};
 const pendingRequests: Record<string, Promise<any>> = {};
 
 // 시트 데이터 가져오기 - 최적화된 버전
-export async function fetchSheetData(range: string): Promise<any[]> {
-  const cacheKey = `sheet_${range}`;
+export async function fetchSheetData(range: string, dateParams?: { startDate?: string, endDate?: string }): Promise<any[]> {
+  // 기본 캐시 키는 범위만 포함
+  let cacheKey = `sheet_${range}`;
+  
+  // 날짜 파라미터가 있으면 캐시 키에 추가
+  if (dateParams && (dateParams.startDate || dateParams.endDate)) {
+    cacheKey += `_${dateParams.startDate || ''}_${dateParams.endDate || ''}`;
+  }
   
   // 캐시된 데이터가 있으면 반환
   if (cache[cacheKey] && Date.now() < cache[cacheKey].expiry) {
@@ -744,10 +750,12 @@ export async function fetchSheetData(range: string): Promise<any[]> {
       
       console.log('API 키 및 시트 ID 확인됨:', !!apiKey, !!sheetId);
       
-      // API 키를 쿼리 파라미터로 전달
-      const response = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`
-      );
+      // 기본 URL
+      let url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`;
+      
+      // 날짜 필터링은 클라이언트 측에서 처리하므로 API URL에 추가하지 않음
+      
+      const response = await fetch(url);
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -788,10 +796,13 @@ export async function fetchSheetData(range: string): Promise<any[]> {
 }
 
 // 통합된 하나의 fetchAllSalesData 함수
-export async function fetchAllSalesData(): Promise<SalesItem[]> {
+export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promise<SalesItem[]> {
   try {
-    // 캐시 키
-    const cacheKey = 'allSalesData';
+    // 현재 날짜 범위에 대한 캐시 키 생성 (범위가 있는 경우)
+    const dateRangeStr = startDate && endDate 
+      ? `_${startDate.toISOString().slice(0, 10)}_${endDate.toISOString().slice(0, 10)}`
+      : '';
+    const cacheKey = `allSalesData${dateRangeStr}`;
     
     // 캐시된 데이터가 있으면 반환
     if (cache[cacheKey] && Date.now() < cache[cacheKey].expiry) {
@@ -800,6 +811,9 @@ export async function fetchAllSalesData(): Promise<SalesItem[]> {
     }
     
     console.log('판매 데이터 새로 가져오는 중...');
+    if (startDate && endDate) {
+      console.log(`지정된 날짜 범위: ${startDate.toLocaleDateString()} ~ ${endDate.toLocaleDateString()}`);
+    }
     
     // 판매 데이터 관련 정보 가져오기 (병렬 처리)
     const [productInfoData, commissions, channelPricingData, sheetMappings] = await Promise.all([
@@ -831,6 +845,9 @@ export async function fetchAllSalesData(): Promise<SalesItem[]> {
     const allSalesData: SalesItem[] = [];
     
     try {
+      // 날짜 파라미터는 더 이상 URL에 직접 추가하지 않음
+      // 대신 클라이언트 측에서 필터링
+      
       // 순차적 데이터 로딩 (각 요청 사이에 지연 적용)
       // 타입 안전성을 위해 프로세서 함수 정의 개선
       type SheetProcessor = (
@@ -846,29 +863,30 @@ export async function fetchAllSalesData(): Promise<SalesItem[]> {
       
       const sheets: SheetConfig[] = [
         { 
-          name: 'smartstore!A2:N', 
+          name: `smartstore!A2:N`, 
           processor: (data, comm, _) => processSmartStoreData(data, comm, [])
         },
         { 
-          name: 'ohouse!A2:AL', 
+          name: `ohouse!A2:AL`, 
           processor: (data, comm, _) => processOhouseData(data, comm, [], false)
         },
         { 
-          name: 'ohouse2!A2:AL', 
+          name: `ohouse2!A2:AL`, 
           processor: (data, comm, _) => processOhouseData(data, comm, [], true)
         },
         { 
-          name: 'YTshopping!A2:T', 
+          name: `YTshopping!A2:T`, 
           processor: (data, comm, exclusions) => processYTShoppingData(data, comm, exclusions)
         },
         { 
-          name: 'coupang!A2:AC', 
+          name: `coupang!A2:AC`, 
           processor: (data, _, exclusions) => processCoupangData(data, exclusions)
         }
       ];
       
       for (const sheet of sheets) {
         try {
+          // 날짜 범위 정보는 따로 전달하지 않음
           const sheetData = await fetchSheetData(sheet.name);
           console.log(`${sheet.name} 데이터 가져오기 성공 (${sheetData.length}행)`);
           
@@ -881,12 +899,18 @@ export async function fetchAllSalesData(): Promise<SalesItem[]> {
           } else {
             processedData = (sheet.processor as SheetProcessor)(sheetData, commissions, exclusions);
           }
+
+          // 서버에서 날짜 필터링 대신 클라이언트에서 필터링
+          if (startDate && endDate) {
+            processedData = filterDataByDateRange(processedData, startDate, endDate);
+            console.log(`${sheet.name.split('!')[0]} 필터링 후 데이터: ${processedData.length}행`);
+          }
           
           allSalesData.push(...processedData);
           
           // API 요청 사이에 지연 추가
           await sleep(1000);
-  } catch (error) {
+        } catch (error) {
           console.error(`${sheet.name} 데이터 가져오기 실패:`, error);
           // 개별 시트 실패해도 계속 진행
         }
@@ -989,70 +1013,35 @@ export async function fetchAllSalesData(): Promise<SalesItem[]> {
                 item.marginRate = (netProfit / totalSales * 100).toFixed(1);
                 item.operatingMarginRate = (operatingProfit / totalSales * 100).toFixed(1);
               }
-            }
-            
-            // 디버깅 로그 추가
-            if (shouldLogDetail) {
-              console.log(`  - 채널별 가격 정보: 채널=${standardizedChannel}, 가격=${priceInfo.price}, 수수료=${priceInfo.fee}%, 공급가=${priceInfo.supplyPrice}`);
-              console.log(`  - 계산된 판매액: ${item.price} × ${item.quantity} = ${item.totalSales}`);
+              
+              // 매칭 성공 카운트 증가
+              matchingSuccessCount++;
             }
           } else {
-            // 가격 정보가 없는 경우 (매핑은 됐으나 가격 정보 없음)
+            // 가격 정보가 없는 경우 상태 표시
             item.matchingStatus = '가격 정보 미확인';
-            
-            // 기존 가격이 있으면 그대로 사용
-            if (item.price) {
-              const totalSales = item.price * item.quantity;
-              item.totalSales = totalSales;
-              
-              if (shouldLogDetail) {
-                console.log(`  - 가격 정보 없음. 기존 가격 사용: ${item.price} × ${item.quantity} = ${totalSales}`);
-              }
-            }
-          }
-          
-          matchingSuccessCount++;
-          
-          // 매핑 성공 로그 (간소화)
-          if (shouldLogDetail) {
-            console.log(`  - 매핑 결과: product_id=${mapping.product_id}, 원본상품명="${mapping.original_name}", 원본옵션명="${mapping.original_option}"`);
-            console.log(`  - 최종 매핑 결과: product_id=${mapping.product_id}`);
-            console.log(`  - 매핑 성공: 상품명="${item.productName}", 옵션명="${item.optionName}"`);
           }
         }
       } else {
+        // 매칭 실패 표시
         item.matchingStatus = '상품 매칭 실패';
-        
-        // 매칭 실패해도 기존 가격이 있으면 매출액 계산
-        if (item.price && item.quantity) {
-          item.totalSales = item.price * item.quantity;
-          
-          if (shouldLogDetail) {
-            console.log(`  - 매핑 실패. 기존 가격으로 매출 계산: ${item.price} × ${item.quantity} = ${item.totalSales}`);
-          }
-        }
       }
       
       return item;
     });
     
-    // 가격 정보 적용 결과
-    const validPriceItems = updatedSalesData.filter(item => item.price && item.price > 0);
-    const validPricePercentage = updatedSalesData.length > 0 ? 
-      (validPriceItems.length / updatedSalesData.length * 100).toFixed(1) : "0.0";
-    console.log(`가격 정보 적용 결과: 유효한 가격 ${validPriceItems.length}개 / 전체 ${updatedSalesData.length}개 (${validPricePercentage}%)`);
+    // 매치 성공률 로그
+    console.log(`매핑 성공 비율: ${matchingSuccessCount}/${mappingAttemptCount} (${(matchingSuccessCount / mappingAttemptCount * 100).toFixed(1)}%)`);
     
-    // 캐시에 저장
+    // 캐시에 데이터 저장 (1시간 유효)
     cache[cacheKey] = {
       data: updatedSalesData,
-      expiry: Date.now() + CACHE_TTL
+      expiry: Date.now() + 3600000  // 1시간 캐시
     };
-    
-    console.log(`판매 데이터 처리 완료: ${updatedSalesData.length}개 항목`);
     
     return updatedSalesData;
   } catch (error) {
-    console.error('판매 데이터 가져오기 중 오류 발생:', error);
+    console.error('판매 데이터 가져오기 오류:', error);
     return [];
   }
 }
