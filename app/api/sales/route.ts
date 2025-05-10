@@ -380,7 +380,13 @@ function getDemoSalesData() {
   const day = now.getDate();
   
   // 이번 달 일자들로 데모 데이터 생성
-  const demoPeriodData = [];
+  const demoPeriodData: {
+    period: string;
+    smartstore: number;
+    ohouse: number;
+    YTshopping: number;
+    coupang: number;
+  }[] = [];
   const daysInMonth = new Date(year, month, 0).getDate();
   const startDay = Math.max(1, day - 5); // 최근 5일 또는 1일부터
   
