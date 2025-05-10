@@ -13,7 +13,8 @@ import { toast } from "sonner"
 
 interface UserAuthFormProps extends React.HTMLAttributes<HTMLDivElement> {}
 
-export function LoginForm({ className, ...props }: UserAuthFormProps) {
+// 실제 로그인 폼 컴포넌트
+function LoginFormContent({ className }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = React.useState<boolean>(false)
   const [email, setEmail] = React.useState<string>("")
   const [password, setPassword] = React.useState<string>("")
@@ -77,7 +78,7 @@ export function LoginForm({ className, ...props }: UserAuthFormProps) {
   }
 
   return (
-    <div className={cn("grid gap-6", className)} {...props}>
+    <div className={cn("grid gap-6", className)}>
       <div className="flex justify-center">
         <Image
           src="/hejdoohomelogo.png"
@@ -127,5 +128,32 @@ export function LoginForm({ className, ...props }: UserAuthFormProps) {
         </div>
       </form>
     </div>
+  )
+}
+
+// 메인 export 컴포넌트 - Suspense 경계 포함
+export function LoginForm(props: UserAuthFormProps) {
+  return (
+    <React.Suspense fallback={
+      <div className="grid gap-6">
+        <div className="flex justify-center">
+          <Image
+            src="/hejdoohomelogo.png"
+            alt="헤이두 홈 로고"
+            width={150}
+            height={50}
+            className="h-12 w-auto"
+            priority
+          />
+        </div>
+        <div className="animate-pulse space-y-4">
+          <div className="h-10 bg-gray-200 rounded"></div>
+          <div className="h-10 bg-gray-200 rounded"></div>
+          <div className="h-10 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    }>
+      <LoginFormContent {...props} />
+    </React.Suspense>
   )
 }
