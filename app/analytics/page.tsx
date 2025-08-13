@@ -612,7 +612,7 @@ export default function DashboardPage() {
         channel: 'all'
       });
 
-      const response = await fetch(`/api/analytics/sales-data?${params}`);
+      const response = await fetch(`/api/analytics/sales-data?${params}`, { cache: 'no-store' });
       
       if (!response.ok) {
         throw new Error(`API 호출 실패: ${response.status}`);

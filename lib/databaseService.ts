@@ -146,18 +146,14 @@ export async function fetchAllSalesDataFromDB() {
 
 // 데이터 필터링 함수들 (기존 googleSheets.ts와 동일한 인터페이스)
 export function filterDataByDateRange(data: any[], startDate: Date, endDate: Date) {
-  // 시작일과 종료일의 시간을 조정 (시작일은 00:00:00, 종료일은 23:59:59)
-  const start = new Date(startDate);
-  start.setHours(0, 0, 0, 0);
-  
-  const end = new Date(endDate);
-  end.setHours(23, 59, 59, 999);
-  
+  // 한국시간 기준 경계로 엄격 필터링
+  const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 0, 0, 0);
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+
   return data.filter(item => {
     if (!item.orderDate) return false;
-    
-    const orderDate = new Date(item.orderDate);
-    return orderDate >= start && orderDate <= end;
+    const kstDate = toKoreanTime(item.orderDate);
+    return kstDate >= start && kstDate <= end;
   });
 }
 

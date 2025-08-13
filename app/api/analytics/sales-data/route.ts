@@ -53,6 +53,10 @@ export async function GET(request: NextRequest) {
 
     while (hasMore) {
       // 기본 쿼리 구성
+      // 한국시간 기준 경계값을 문자열로 생성 (타임존 명시)
+      const startBoundary = `${startDateTime.getFullYear()}-${String(startDateTime.getMonth() + 1).padStart(2, '0')}-${String(startDateTime.getDate()).padStart(2, '0')}T00:00:00+09:00`;
+      const endBoundary = `${endDateTime.getFullYear()}-${String(endDateTime.getMonth() + 1).padStart(2, '0')}-${String(endDateTime.getDate()).padStart(2, '0')}T23:59:59+09:00`;
+
       let query = supabase
         .from('orders')
         .select(`
@@ -70,8 +74,8 @@ export async function GET(request: NextRequest) {
           status,
           product_order_number
         `)
-        .gte('order_date', `${startDateTime.getFullYear()}-${String(startDateTime.getMonth() + 1).padStart(2, '0')}-${String(startDateTime.getDate()).padStart(2, '0')}T${String(startDateTime.getHours()).padStart(2, '0')}:${String(startDateTime.getMinutes()).padStart(2, '0')}:${String(startDateTime.getSeconds()).padStart(2, '0')}`)
-        .lte('order_date', `${endDateTime.getFullYear()}-${String(endDateTime.getMonth() + 1).padStart(2, '0')}-${String(endDateTime.getDate()).padStart(2, '0')}T${String(endDateTime.getHours()).padStart(2, '0')}:${String(endDateTime.getMinutes()).padStart(2, '0')}:${String(endDateTime.getSeconds()).padStart(2, '0')}`)
+        .gte('order_date', startBoundary)
+        .lte('order_date', endBoundary)
         .order('order_date', { ascending: true })
         .range(from, from + batchSize - 1);
 
