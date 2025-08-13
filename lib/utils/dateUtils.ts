@@ -15,20 +15,15 @@ export function toKoreanTime(date: Date | string): Date {
         return new Date();
       }
 
-      // DB에 저장된 시간이 실제로는 KST인데 +00:00으로 표시되는 경우
-      // (예: "2025-07-25T18:20:00+00:00"는 실제로는 KST 2025/07/25 18:20)
+      // DB에 저장된 시간이 UTC(+00:00)인 경우 → KST(+9h)로 변환
+      // 예: "2025-07-31T15:03:00+00:00" → KST "2025-08-01T00:03:00"
       if (date.includes('+00:00')) {
-        // +00:00을 제거하고 +09:00을 명시적으로 추가하여 KST로 해석
-        const kstDateString = date.replace('+00:00', '+09:00');
-        const result = new Date(kstDateString);
-        
-        if (isNaN(result.getTime())) {
-          console.warn('🔍 toKoreanTime: 잘못된 KST 날짜 문자열:', date);
+        const utc = new Date(date);
+        if (isNaN(utc.getTime())) {
+          console.warn('🔍 toKoreanTime: 잘못된 UTC(+00:00) 날짜 문자열:', date);
           return new Date();
         }
-        
-
-        return result;
+        return new Date(utc.getTime() + 9 * 60 * 60 * 1000);
       }
       // 이미 한국시간으로 저장된 경우 (예: "2025-07-01T00:02:40")
       else if (date.includes('T') && !date.includes('Z') && !date.includes('+')) {
