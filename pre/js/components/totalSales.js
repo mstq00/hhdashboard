@@ -116,27 +116,27 @@ export class TotalSales {
                             
                             processedOrdersByMonth[month].add(orderKey);
                             
-                            const quantity = parseInt(item.quantity) || 0;
-                            
-                            // 스토어 분석과 동일한 매핑 로직 적용
-                            const originalProduct = item.originalProduct || item.productName || '';
-                            const originalOption = item.originalOption || '';
-                            const mappingInfo = this.dataService.mappingService.getMappedProductInfo(
-                                originalProduct,
-                                originalOption,
-                                item.channel || item.seller
-                            );
+                    const quantity = parseInt(item.quantity) || 0;
+                    
+                    // 스토어 분석과 동일한 매핑 로직 적용
+                    const originalProduct = item.originalProduct || item.productName || '';
+                    const originalOption = item.originalOption || '';
+                    const mappingInfo = this.dataService.mappingService.getMappedProductInfo(
+                        originalProduct,
+                        originalOption,
+                        item.channel || item.seller
+                    );
 
-                            let price = 0;
-                            if (mappingInfo) {
+                    let price = 0;
+                    if (mappingInfo) {
                                 price = mappingInfo.price || 0;
-                            }
+                    }
 
-                            const sales = quantity * price;
-                            
+                    const sales = quantity * price;
+                    
                             // NaN 체크
                             if (!isNaN(sales) && sales > 0) {
-                                monthlySales[month].storeSales += sales;
+                        monthlySales[month].storeSales += sales;
                             }
                         }
                     }
@@ -318,12 +318,12 @@ export class TotalSales {
                 if (!processedOrders.has(orderKey) && !['취소', '미결제취소', '반품'].includes(item.orderStatus)) {
                     processedOrders.add(orderKey);
                     
-                    const quantity = parseInt(item.quantity) || 0;
-                    const mappingInfo = this.dataService.mappingService.getMappedProductInfo(
-                        item.originalProduct || item.productName || '',
-                        item.originalOption || '',
-                        item.channel || item.seller
-                    );
+                const quantity = parseInt(item.quantity) || 0;
+                const mappingInfo = this.dataService.mappingService.getMappedProductInfo(
+                    item.originalProduct || item.productName || '',
+                    item.originalOption || '',
+                    item.channel || item.seller
+                );
                     
                     const price = mappingInfo ? (mappingInfo.price || 0) : 0;
                     const sales = quantity * price;
@@ -472,7 +472,7 @@ export class TotalSales {
 
         // 데이터 중복 처리를 위한 Set
         const processedOrders = new Set();
-        
+
         const storeData = this.dataService.getCurrentData();
         storeData.forEach(item => {
             const date = new Date(item.date);
@@ -485,21 +485,21 @@ export class TotalSales {
                 if (!processedOrders.has(orderKey)) {
                     processedOrders.add(orderKey);
                     
-                    const channel = item.channel || item.seller;
-                    const mappingInfo = this.dataService.mappingService.getMappedProductInfo(
+                const channel = item.channel || item.seller;
+                const mappingInfo = this.dataService.mappingService.getMappedProductInfo(
                         item.originalProduct || item.productName || '',
                         item.originalOption || '',
-                        channel
-                    );
+                    channel
+                );
 
-                    if (mappingInfo && !['취소', '미결제취소', '반품'].includes(item.orderStatus)) {
+                if (mappingInfo && !['취소', '미결제취소', '반품'].includes(item.orderStatus)) {
                         const quantity = parseInt(item.quantity) || 0;
                         const price = mappingInfo.price || 0; // 매핑 정보가 없으면 0으로 처리
                         const sales = quantity * price;
                         
                         // NaN 체크
                         if (!isNaN(sales) && sales > 0) {
-                            channelSales[channel] += sales;
+                        channelSales[channel] += sales;
                         }
                     }
                 }

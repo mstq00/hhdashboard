@@ -45,6 +45,7 @@ function LoginFormContent({ className }: UserAuthFormProps) {
       // 로그인 성공 정보 로깅
       console.log('로그인 성공. 사용자 ID:', data.user?.id)
       console.log('세션 설정 완료:', data.session ? '성공' : '실패')
+      console.log('세션 토큰:', data.session?.access_token ? '있음' : '없음')
       
       // 로그인 성공
       toast.success("로그인 성공", {
@@ -59,11 +60,9 @@ function LoginFormContent({ className }: UserAuthFormProps) {
         // 상태 초기화 (중요: 로딩 상태 해제)
         setIsLoading(false)
         
-        // 로그인 후 쿠키/세션이 설정될 시간을 주기 위해 약간 지연
-        setTimeout(() => {
-          // 인증 우회 파라미터 추가 (미들웨어 오작동 방지용)
-          window.location.href = "/dashboard?skip_auth=true";
-        }, 1000); // 1초로 늘림
+        // 로그인 후 즉시 대시보드로 이동 (세션 설정 완료 후)
+        console.log('로그인 성공: 대시보드로 이동 시도')
+        window.location.href = "/analytics";
       } catch (navError) {
         console.error("페이지 이동 오류:", navError);
         setIsLoading(false);

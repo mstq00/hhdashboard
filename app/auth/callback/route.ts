@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     }
     
     console.log('인증 성공 - 대시보드로 리다이렉션');
-    return NextResponse.redirect(`${origin}/dashboard`);
+    return NextResponse.redirect(`${origin}/analytics`);
   } catch (error) {
     console.error('콜백 처리 중 예외 발생:', error);
     return NextResponse.redirect(`${origin}/auth/auth-error?reason=internal_error`);

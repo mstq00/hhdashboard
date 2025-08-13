@@ -135,131 +135,64 @@ export function normalizeChannelName(channel: string): string {
 
 // 스마트스토어 데이터 처리
 export function processSmartStoreData(data: any[][], commissions: Record<string, number>, productMappings: ProductMapping[]): SalesItem[] {
-  try {
-    // console.log(`스마트스토어 데이터 처리 시작: ${data.length}행`);
-    
-    // 샘플 데이터 행 확인
-    // if (data.length > 0) {
-    //   console.log('스마트스토어 헤더:',
-    //     `주문번호: ${data[0][1] || ''} ` +
-    //     `주문일시: ${data[0][2] || ''} ` +
-    //     `주문상태: ${data[0][3] || ''} ` +
-    //     `상품명: ${data[0][8] || ''} ` +
-    //     `옵션명: ${data[0][9] || ''} ` +
-    //     `수량: ${data[0][10] || ''} ` +
-    //     `구매자명: ${data[0][11] || ''} ` +
-    //     `연락처: ${data[0][12] || ''}`
-    //   );
-    // }
-    
-    const results: SalesItem[] = [];
-    let processed = 0;
-    let excluded = 0;
-    let mapped = 0;
-    let dateParseFailures = 0;
-    
-    for (let i = 0; i < data.length; i++) {
-      try {
-      const row = data[i];
-        if (!row || !row[1]) continue; // 빈 행 무시
-        
-        // 샘플 데이터 행 확인 (처음 몇 개만)
-        // if (i < 5) {
-        //   console.log(`스마트스토어 데이터 ${i}:`,
-        //     `주문번호: ${row[1] || ''} ` +
-        //     `주문일시: ${row[2] || ''} ` +
-        //     `주문상태: ${row[3] || ''} ` +
-        //     `상품명: ${row[8] || ''} ` +
-        //     `옵션명: ${row[9] || ''}`
-        //   );
-        // }
-        
-        // 날짜 파싱
-        const orderDateStr = row[2] ? String(row[2]).trim() : null;
-      let orderDate: Date | null = null;
-      
-        if (orderDateStr) {
-          orderDate = parseDate(orderDateStr);
-          if (!orderDate) {
-            // console.log(`스마트스토어 날짜 파싱 실패 (${i}행):`, orderDateStr);
-            dateParseFailures++;
-          }
-      }
-      
-      if (!orderDate) {
-        excluded++;
-        continue;
-      }
-      
-        const orderNumber = row[1]; // 주문번호 (B열)
-        const productName = row[8]; // 상품명 (I열)
-        const optionName = row[9] || ''; // 옵션정보 (J열)
-        const quantity = parseInt(row[10], 10) || 1; // 수량 (K열)
-        const status = row[3] || '주문완료'; // 주문상태 (D열)
-      
-      // 고객 정보
-        const customerName = row[11] || ''; // 구매자명 (L열)
-        const customerID = row[12] || ''; // 연락처 (M열)
-      
-      // 제품 매핑 찾기
-      let mappedProductName = '';
-      let commissionRate = 0;
-      let price = 0;
-      
-      // 제품 매핑 적용
-      for (const mapping of productMappings) {
-        if (productName && mapping.searchTerms && 
-            mapping.searchTerms.some(term => 
-              productName.toLowerCase().includes(term.toLowerCase())
-            )) {
-          mappedProductName = mapping.mappedName;
-          commissionRate = mapping.commissionRate;
-          price = mapping.price;
-          mapped++;
-          break;
-        }
-      }
-      
-      // 매핑된 상품명이 없으면 원래 상품명 사용
-      if (!mappedProductName) {
-        mappedProductName = productName;
-        commissionRate = commissions.smartstore || 0;
-      }
-      
-      // 수수료 및 순이익 계산
-      const commissionAmount = price * (commissionRate / 100);
-      const netProfit = price - commissionAmount;
-      
-      // 결과 추가
-      results.push({
-        channel: '스마트스토어',
-        orderNumber,
-        orderDate: orderDate.toISOString(),
-        customerName,
-        customerID,
-        productName: mappedProductName,
-        optionName,
-        quantity,
-        price,
-        commissionRate,
-        commissionAmount,
-        netProfit,
-        status
-      });
-      
-      processed++;
-      } catch (error) {
-        console.error(`스마트스토어 날짜 파싱 오류 (${i}행):`, error);
-        dateParseFailures++;
-      }
+  const items: SalesItem[] = [];
+  let excludedCount = 0;
+  let parseFailCount = 0;
+
+  if (!data || data.length === 0) return items;
+
+  data.forEach((row, index) => {
+    if (!row || row.length < 13) {
+      excludedCount++;
+      return;
     }
-    
-    console.log(`스마트스토어 처리 완료: ${processed}개 처리, ${excluded}개 제외, ${dateParseFailures}개 날짜 파싱 실패`);
-    return results;
-  } catch (error) {
-    console.error('스마트스토어 데이터 처리 오류:', error);
-    return [];
+
+    // 주문번호, 주문일시, 주문상태, 주문수량, 상품명, 옵션명, 구매자명, 연락처 추출
+    const orderNumber = row[1]?.toString().trim();
+    const orderDate = parseDate(row[2]);
+    const orderStatus = row[3]?.toString().trim() || '';
+    const quantity = parseInt(row[10]) || 0;
+    const productName = row[8]?.toString().trim() || '';
+    const optionName = row[9]?.toString().trim() || '';
+    const customerName = row[11]?.toString().trim() || '';
+    const customerID = row[12]?.toString().trim() || '';
+
+    if (!orderNumber || !orderDate || !productName) {
+      excludedCount++;
+      return;
+    }
+
+    if (!isValidDate(orderDate)) {
+      parseFailCount++;
+      return;
+    }
+
+    // 기본 매출 데이터 생성 (매핑은 나중에 적용)
+    const item: SalesItem = {
+      channel: '스마트스토어',
+      orderNumber,
+      orderDate: orderDate.toISOString(),
+      customerName,
+      customerID,
+      productName,
+      optionName,
+      quantity,
+      price: 0, // 매핑에서 설정
+      commissionRate: commissions['스마트스토어'] || 12,
+      commissionAmount: 0,
+      netProfit: 0,
+      status: orderStatus
+    };
+
+    items.push(item);
+  });
+
+  // 로그 간소화
+  if (data.length > 0) {
+    console.log(`스마트스토어 처리 완료: ${items.length}개 처리, ${excludedCount}개 제외, ${parseFailCount}개 날짜 파싱 실패`);
   }
+
+  return items;
 }
 
 // 첫 번째 데이터 파싱 추적을 위한 변수
@@ -469,10 +402,6 @@ export function processYTShoppingData(data: any[][], commissions: Record<string,
     
     console.log(`유튜브쇼핑 데이터 처리 시작: ${data.length}행`);
     
-    // 첫 행에서 헤더 찾기 시도
-    const firstRow = data[0];
-    console.log(`유튜브쇼핑 헤더: ${firstRow.join(' ')}`);
-    
     const processedData: SalesItem[] = [];
     let skippedCount = 0;
     let dateParseFailCount = 0;
@@ -538,11 +467,11 @@ export function processYTShoppingData(data: any[][], commissions: Record<string,
       const commissionRate = commissions['유튜브쇼핑'] || commissions['YTshopping'] || 2.8;
       const commissionAmount = price * quantity * (commissionRate / 100);
       
-      // 샘플 데이터 로깅
-      if (sampleCount < 5) {
-        console.log(`${sampleCount+1}번 데이터: 주문번호: ${orderNumber}, 주문일시: ${orderDateStr}, 상품명: ${productName}, 옵션명: ${optionName}, 가격: ${price}, 수량: ${quantity}`);
-        sampleCount++;
-      }
+      // 샘플 데이터 로깅 (필요시에만 활성화)
+      // if (sampleCount < 5) {
+      //   console.log(`${sampleCount+1}번 데이터: 주문번호: ${orderNumber}, 주문일시: ${orderDateStr}, 상품명: ${productName}, 옵션명: ${optionName}, 가격: ${price}, 수량: ${quantity}`);
+      //   sampleCount++;
+      // }
       
       // 정제된 데이터 생성
       const salesItem: SalesItem = {
@@ -587,20 +516,16 @@ export function processCoupangData(data: any[][], exclusionOrderNumbers: string[
       exclusionOrderNumbers = [];
     }
     
-    // 첫 번째 행의 헤더 확인
-    const header = data[0];
-    console.log(`쿠팡 헤더: 주문번호: ${header[2]} 주문일시: ${header[9]} 상품명: ${header[10]} 옵션명: ${header[11]} 수량: ${header[22]} 구매자명: ${header[24]} 연락처: ${header[28]}`);
-    
-    // 처음 5개 데이터 샘플 로깅
-    console.log('쿠팡 처음 5개 데이터 샘플:');
-      for (let i = 1; i < Math.min(6, data.length); i++) {
-      const row = data[i];
-      if (row && row.length > 28) {
-        console.log(`${i}번 데이터: 주문번호: ${row[2]}, 주문일시: ${row[9]}, 상품명: ${row[10]}, 옵션명: ${row[11]}`);
-      } else {
-        console.log(`${i}번 데이터: 데이터 형식 오류 또는 빈 행`);
-      }
-    }
+    // 디버깅 로그 (필요시에만 활성화)
+    // const header = data[0];
+    // console.log(`쿠팡 헤더: 주문번호: ${header[2]} 주문일시: ${header[9]} 상품명: ${header[10]} 옵션명: ${header[11]} 수량: ${header[22]} 구매자명: ${header[24]} 연락처: ${header[28]}`);
+    // console.log('쿠팡 처음 5개 데이터 샘플:');
+    // for (let i = 1; i < Math.min(6, data.length); i++) {
+    //   const row = data[i];
+    //   if (row && row.length > 28) {
+    //     console.log(`${i}번 데이터: 주문번호: ${row[2]}, 주문일시: ${row[9]}, 상품명: ${row[10]}, 옵션명: ${row[11]}`);
+    //   }
+    // }
     
     const results: SalesItem[] = [];
     let processed = 0;
@@ -683,7 +608,7 @@ async function sleep(ms: number): Promise<void> {
 }
 
 // 캐싱 및 API 요청 관리 변수
-const CACHE_TTL = 60 * 60 * 1000; // 1시간 캐시 유효시간
+const CACHE_TTL = 60 * 60 * 1000; // 1시간 캐시
 
 // 타입 지정된 인터페이스
 interface CacheItem<T> {
@@ -699,139 +624,120 @@ const pendingRequests: Record<string, Promise<any>> = {};
 
 // 시트 데이터 가져오기 - 최적화된 버전
 export async function fetchSheetData(range: string, dateParams?: { startDate?: string, endDate?: string }): Promise<any[]> {
-  // 기본 캐시 키는 범위만 포함
-  let cacheKey = `sheet_${range}`;
-  
-  // 날짜 파라미터가 있으면 캐시 키에 추가
-  if (dateParams && (dateParams.startDate || dateParams.endDate)) {
-    cacheKey += `_${dateParams.startDate || ''}_${dateParams.endDate || ''}`;
-  }
-  
-  // 캐시된 데이터가 있으면 반환
-  if (cache[cacheKey] && Date.now() < cache[cacheKey].expiry) {
-    // 로그 간소화 - 모바일에서의 부담 감소
-    return cache[cacheKey].data;
-  }
-  
-  // 진행 중인 요청이 있는지 확인
-  let pendingRequest = pendingRequests[cacheKey];
-  if (pendingRequest) {
-    // 로그 간소화
-    return pendingRequest;
-  }
-  
-  console.log(`데이터 로드 중: ${range.split('!')[0]}`);
-  
-  // 새 요청 생성
-  pendingRequest = (async () => {
-    try {
-      // API 키를 사용한 인증 방식으로 변경
-      // 임시 하드코딩된 API 키 (테스트용)
-      const hardcodedApiKey = 'AIzaSyD1I839Np6CFFysPqwSQlxBDYPiFzguBiM';
-      
-      // 환경 변수 또는 하드코딩된 키 사용
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY || 
-                     process.env.GOOGLE_API_KEY || 
-                     hardcodedApiKey;
-      
-      // 로그 간소화
-      if (!apiKey) {
-        throw new Error('Google API 키가 설정되지 않았습니다.');
-      }
-      
-      // 스프레드시트 ID 확인 - 임시 하드코딩 지원
-      const hardcodedSheetId = '1Hu-V8dDmE1j5gQz4Gk4LHclBZS9UEAVVr5IPd2e0G-o';
-      const sheetId = process.env.NEXT_PUBLIC_SHEET_ID || hardcodedSheetId;
-      
-      if (!sheetId) {
-        throw new Error('스프레드시트 ID가 설정되지 않았습니다.');
-      }
-      
-      // 기본 URL
-      let url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`;
-      
-      // 날짜 필터링은 클라이언트 측에서 처리하므로 API URL에 추가하지 않음
-      
-      // 타임아웃 적용 - 모바일 환경에서의 안정성 향상
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30초 타임아웃
-      
-      try {
-        const response = await fetch(url, {
-          signal: controller.signal,
-          // 캐시 제어를 통한 안정성 향상
-          cache: 'no-store'
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`API 응답 오류 (${response.status}): ${errorText}`);
-        }
-        
-        const data = await response.json();
-        const values = data.values || [];
-        
-        // 캐시에 결과 저장
-        cache[cacheKey] = {
-          data: values,
-          expiry: Date.now() + CACHE_TTL
-        };
-        
-        console.log(`${range.split('!')[0]} 로드 완료: ${values.length}행`);
-        return values;
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        throw fetchError;
-      }
-    } catch (error: any) {
-      // 오류 로깅 간소화
-      let errorMessage = '데이터 로드 오류';
-      
-      if (error.name === 'AbortError') {
-        errorMessage = '요청 시간 초과';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      console.error(`${range.split('!')[0]} 오류: ${errorMessage}`);
-      
-      // 할당량 초과 오류 특별 처리
-      if (error.message && error.message.includes('429')) {
-        console.error('API 할당량 초과. 잠시 후 다시 시도하세요.');
-        return [];
-      }
-      
-    throw error;
-    } finally {
-      // 요청 완료 후 pendingRequests에서 제거
-      delete pendingRequests[cacheKey];
-    }
-  })();
-  
-  // 진행 중인 요청 저장
-  pendingRequests[cacheKey] = pendingRequest;
-  
-  return pendingRequest;
-}
-
-// 통합된 하나의 fetchAllSalesData 함수
-export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promise<SalesItem[]> {
   try {
-    // 현재 날짜 범위에 대한 캐시 키 생성 (범위가 있는 경우)
-    const dateRangeStr = startDate && endDate 
-      ? `_${startDate.toISOString().slice(0, 10)}_${endDate.toISOString().slice(0, 10)}`
-      : '';
-    const cacheKey = `allSalesData${dateRangeStr}`;
+    // 캐시 키 생성
+    const cacheKey = `sheet_${range}_${dateParams?.startDate || 'none'}_${dateParams?.endDate || 'none'}`;
     
-    // 캐시된 데이터가 있으면 반환
+    // 캐시된 데이터 확인
     if (cache[cacheKey] && Date.now() < cache[cacheKey].expiry) {
-      // 로그 간소화
       return cache[cacheKey].data;
     }
+
+    // API 요청 레이트 제한 (동시 요청 방지)
+    await sleep(100);
     
-    console.log('데이터 로드 중...');
+    // 환경 변수 또는 하드코딩된 값 사용
+    const hardcodedApiKey = 'AIzaSyD1I839Np6CFFysPqwSQlxBDYPiFzguBiM';
+    const hardcodedSheetId = '1Hu-V8dDmE1j5gQz4Gk4LHclBZS9UEAVVr5IPd2e0G-o';
+    
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY || 
+                   process.env.GOOGLE_API_KEY || 
+                   hardcodedApiKey;
+    const sheetId = process.env.NEXT_PUBLIC_SHEET_ID || hardcodedSheetId;
+    
+    let url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`;
+    
+    // 날짜 범위 파라미터가 있는 경우 추가
+    if (dateParams?.startDate && dateParams?.endDate) {
+      url += `&dateTimeRenderOption=FORMATTED_VALUE&majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE`;
+    }
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      console.error(`시트 데이터 가져오기 실패: ${response.status} ${response.statusText} - Range: ${range}`);
+      throw new Error(`시트 데이터 가져오기 실패: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const rows = data.values || [];
+    
+    // 로그 간소화 - 시트명만 출력
+    const sheetName = range.split('!')[0];
+    console.log(`${sheetName} 로드 완료: ${rows.length}행`);
+    
+    // 캐시에 저장 (30분 유효)
+    cache[cacheKey] = {
+      data: rows,
+      expiry: Date.now() + (30 * 60 * 1000)
+    };
+    
+    return rows;
+  } catch (error) {
+    console.error(`시트 데이터 가져오기 오류 - Range: ${range}:`, error);
+    return [];
+  }
+}
+
+// 캐시를 위한 전역 변수 추가
+let dataCache: Map<string, { data: SalesItem[], timestamp: number }> = new Map();
+const CACHE_DURATION = 10 * 60 * 1000; // 10분 캐시 (중복 요청 방지)
+
+// 캐시 키 생성 함수
+function getCacheKey(startDate?: Date, endDate?: Date): string {
+  if (!startDate || !endDate) {
+    return 'all_data';
+  }
+  // 날짜를 YYYY-MM-DD 형식으로 정규화하여 일관성 보장
+  const start = startDate.toISOString().split('T')[0];
+  const end = endDate.toISOString().split('T')[0];
+  return `sales_${start}_${end}`;
+}
+
+// 캐시에서 데이터 가져오기
+function getCachedData(cacheKey: string): SalesItem[] | null {
+  const cached = dataCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+    console.log('✅ 캐시된 데이터 사용:', cacheKey, `(${cached.data.length}개 항목)`);
+    return cached.data;
+  }
+  
+  // 만료된 캐시 정리
+  if (cached) {
+    console.log('⏰ 캐시 만료됨, 새로 로드:', cacheKey);
+    dataCache.delete(cacheKey);
+  }
+  
+  return null;
+}
+
+// 캐시에 데이터 저장
+function setCachedData(cacheKey: string, data: SalesItem[]): void {
+  dataCache.set(cacheKey, { data, timestamp: Date.now() });
+  
+  // 캐시 크기 제한 (최대 10개 항목)
+  if (dataCache.size > 10) {
+    const firstKey = dataCache.keys().next().value;
+    dataCache.delete(firstKey);
+  }
+}
+
+// 메인 함수 수정
+export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promise<SalesItem[]> {
+  const cacheKey = getCacheKey(startDate, endDate);
+  const cachedData = getCachedData(cacheKey);
+  if (cachedData) {
+    return cachedData;
+  }
+  
+  try {
+    // MappingService 임포트 및 인스턴스 생성
+    const { MappingService } = await import('@/lib/mappingService');
+    const mappingService = new MappingService();
+    await mappingService.loadMappingData();
+    
+    const salesDataArray: SalesItem[] = [];
+    let delayBetweenRequests = 100;
     
     // 판매 데이터 관련 정보 가져오기 (병렬 처리)
     const [productInfoData, commissions, channelPricingData, sheetMappings] = await Promise.all([
@@ -840,8 +746,6 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
       fetchChannelPricingFromDatabase(),
       fetchSheetMappingsFromDatabase()
     ]);
-    
-    // 로그 간소화
     
     // 가격 정보 맵 생성
     const priceInfoMap = new Map<string, { price: number, fee: number, supplyPrice: number }>();
@@ -861,11 +765,7 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
     const allSalesData: SalesItem[] = [];
     
     try {
-      // 날짜 파라미터는 더 이상 URL에 직접 추가하지 않음
-      // 대신 클라이언트 측에서 필터링
-      
       // 순차적 데이터 로딩 (각 요청 사이에 지연 적용)
-      // 타입 안전성을 위해 프로세서 함수 정의 개선
       type SheetProcessor = (
         data: any[][], 
         commissions: Record<string, number>, 
@@ -911,7 +811,7 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
           // 날짜 범위 정보는 따로 전달하지 않음
           const sheetData = await fetchSheetData(sheet.name);
           
-          const exclusions = allSalesData.map(item => item.orderNumber);
+          const exclusions = salesDataArray.map(item => item.orderNumber);
           
           let processedData: SalesItem[];
           if (sheet.name.includes('coupang')) {
@@ -927,7 +827,7 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
             console.log(`${sheet.name.split('!')[0]}: ${processedData.length}개 항목 필터링됨`);
           }
           
-          allSalesData.push(...processedData);
+          salesDataArray.push(...processedData);
           
           // API 요청 사이에 지연 추가
           await sleep(delayBetweenRequests);
@@ -941,17 +841,15 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
       // 일부 시트 데이터라도 처리 계속
     }
     
-    console.log(`총 ${allSalesData.length}개 항목 로드됨`);
+    console.log(`총 ${salesDataArray.length}개 항목 로드됨`);
     
     // 상품 정보 적용
     let mappingAttemptCount = 0;
     let matchingSuccessCount = 0;
     
-    const updatedSalesData = allSalesData.map((item) => {
+    const updatedSalesData = salesDataArray.map((item) => {
       // 매핑 시도 횟수 증가
       mappingAttemptCount++;
-      
-      // 매핑 시도 로그 제거 (모바일 성능 향상을 위해)
       
       // 매핑 시도
       let mapping = findMapping(sheetMappings, item.productName, item.optionName);
@@ -1045,13 +943,8 @@ export async function fetchAllSalesData(startDate?: Date, endDate?: Date): Promi
       return item;
     });
     
-    // 매치 성공률 로그 간소화
-    
-    // 캐시에 데이터 저장 (1시간 유효)
-    cache[cacheKey] = {
-      data: updatedSalesData,
-      expiry: Date.now() + 3600000  // 1시간 캐시
-    };
+    // 캐시에 데이터 저장
+    setCachedData(cacheKey, updatedSalesData);
     
     return updatedSalesData;
   } catch (error) {
@@ -1089,15 +982,6 @@ export async function fetchProductsFromDatabase(): Promise<ProductInfo[]> {
     if (error) {
       console.error('상품 정보 가져오기 오류:', error);
       return [];
-    }
-    
-    console.log(`${data.length}개 상품 정보 로드됨`);
-    
-    if (data.length > 0) {
-      console.log('상품 정보 샘플:');
-      for (let i = 0; i < Math.min(5, data.length); i++) {
-        console.log(`${i + 1}. id=${data[i].id}, name=${data[i].name}, option=${data[i].option}`);
-      }
     }
     
     console.log(`상품 데이터베이스에서 ${data.length}개 상품 정보 로드됨`);
@@ -1217,15 +1101,29 @@ export function aggregateProductSales(salesData: any[]) {
     const validSalesData = salesData.filter(item => isValidOrderStatus(item.status));
     
     validSalesData.forEach(item => {
-      // 상품명과 옵션명 가져오기
-      const productName = item.productName || '알 수 없는 상품';
-      const optionName = item.optionName || '-';  // 빈 문자열 대신 하이픈으로 통일
+      // 매핑된 상품명과 옵션명 우선 사용, 없으면 원본 사용
+      const productName = item.mappedProductName || item.productName || '알 수 없는 상품';
+      const optionName = item.mappedOptionName || item.optionName || '-';  // 빈 문자열 대신 하이픈으로 통일
       
       // 매칭 상태 확인
-      const isSuccessfullyMapped = item.matchingStatus === '매칭 성공';
+      const isSuccessfullyMapped = item.matchingStatus === '매핑완료';
       
       // 상품명과 옵션명을 키로 사용
       const productKey = `${productName}##${optionName}`;
+      
+      // 디버깅: 모든 아이템의 키와 데이터 확인 (처음 5개만)
+      if (Object.keys(productSales).length < 5) {
+        console.log('🔍 aggregateProductSales 키 생성:', {
+          productKey,
+          productName,
+          optionName,
+          netProfit: item.netProfit,
+          operatingProfit: item.operatingProfit,
+          cost: item.cost,
+          commissionAmount: item.commissionAmount,
+          sales: item.totalSales || (item.price * item.quantity)
+        });
+      }
       
       if (!productSales[productKey]) {
         productSales[productKey] = {
@@ -1233,11 +1131,12 @@ export function aggregateProductSales(salesData: any[]) {
           option: optionName,  // 옵션명은 매핑된 값으로 사용
           quantity: 0,
           sales: 0,
+          cost: 0,  // 공급가 추가
           commissionAmount: 0,
           netProfit: 0,
           operatingProfit: 0,
           channels: {},
-          matchingStatus: item.matchingStatus || '상품 매칭 실패'
+          matchingStatus: item.matchingStatus || '미매핑'
         };
       }
       
@@ -1246,14 +1145,28 @@ export function aggregateProductSales(salesData: any[]) {
       
       // totalSales 필드가 있으면 사용하고, 없으면 가격과 수량을 곱해서 계산
       const itemSales = item.totalSales !== undefined ? item.totalSales : (item.price || 0) * (item.quantity || 1);
-      product.sales += itemSales;
-      product.commissionAmount += (item.commissionAmount || 0);
-      product.netProfit += (item.netProfit || 0);
-      product.operatingProfit += (item.operatingProfit || 0);
+      const itemCost = (item.cost || 0) * (item.quantity || 1);  // 공급가 계산
+      const itemCommissionAmount = item.commissionAmount || 0;
       
-      // 매핑 상태가 '매칭 성공'인 항목이 있으면 전체를 '매칭 성공'으로 업데이트
+      product.sales += itemSales;
+      product.cost += itemCost;  // 공급가 누적
+      product.commissionAmount += itemCommissionAmount;
+      
+      // 순이익과 영업이익이 이미 계산되어 있으면 사용, 없으면 계산
+      if (item.netProfit !== undefined && item.operatingProfit !== undefined) {
+        product.netProfit += item.netProfit;
+        product.operatingProfit += item.operatingProfit;
+      } else {
+        // 직접 계산
+        const netProfit = itemSales - itemCost;
+        const operatingProfit = netProfit - itemCommissionAmount;
+        product.netProfit += netProfit;
+        product.operatingProfit += operatingProfit;
+      }
+      
+      // 매핑 상태가 '매핑완료'인 항목이 있으면 전체를 '매핑완료'로 업데이트
       if (isSuccessfullyMapped) {
-        product.matchingStatus = '매칭 성공';
+        product.matchingStatus = '매핑완료';
       }
       
       // 채널별 데이터 추가
@@ -1312,17 +1225,25 @@ export function aggregateProductSales(salesData: any[]) {
               displayName = channel;
           }
           
-          return {
-            channel,
-            displayName,
-            ...data,
-            percentage: product.sales > 0 ? (data.sales / product.sales) * 100 : 0
-          };
-        }).sort((a: any, b: any) => b.sales - a.sales);
-        
-        return product;
-      })
-      .sort((a: any, b: any) => b.sales - a.sales);
+                  return {
+          channel,
+          displayName,
+          ...data,
+          percentage: product.sales > 0 ? (data.sales / product.sales) * 100 : 0
+        };
+      }).sort((a: any, b: any) => b.sales - a.sales);
+      
+      return {
+        ...product,
+        cost: product.cost || 0,
+        commissionAmount: product.commissionAmount || 0,
+        netProfit: product.netProfit || 0,
+        operatingProfit: product.operatingProfit || 0,
+        marginRate: product.marginRate || 0,
+        operatingMarginRate: product.operatingMarginRate || 0
+      };
+    })
+    .sort((a: any, b: any) => b.sales - a.sales);
   } catch (error) {
     console.error('제품별 매출 집계 오류:', error);
     return [];
@@ -1605,10 +1526,10 @@ export function filterDataByDateRange(salesData: SalesItem[], startDate: Date, e
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
     
-    // 디버깅 로그
+    // 디버깅 로그 - 범위만 출력
     console.log(`날짜 필터링: ${start.toISOString()} ~ ${end.toISOString()}`);
     
-    return salesData.filter(item => {
+    const filtered = salesData.filter(item => {
       if (!item.orderDate) return false;
       
       const orderDate = new Date(item.orderDate);
@@ -1621,19 +1542,14 @@ export function filterDataByDateRange(salesData: SalesItem[], startDate: Date, e
         0, 0, 0, 0
       );
       
-      // 정확한 날짜 비교
-      const isInRange = itemDate >= start && itemDate <= end;
-      
-      // 디버깅을 위한 추가 로그 (처음 몇 개만)
-      if (salesData.indexOf(item) < 5) {
-        console.log(`항목 날짜 확인: ${itemDate.toISOString()}, 범위: ${isInRange}, 원본: ${item.orderDate}`);
-      }
-      
-      return isInRange;
+      return itemDate >= start && itemDate <= end;
     });
+    
+    console.log(`필터링 완료: ${filtered.length}/${salesData.length}개 항목`);
+    return filtered;
   } catch (error) {
-    console.error('날짜 범위 필터링 오류:', error);
-    return [];
+    console.error('날짜 필터링 오류:', error);
+    return salesData; // 오류 시 원본 데이터 반환
   }
 }
 
@@ -1795,5 +1711,142 @@ export async function fetchProductPricesFromDatabase() {
   } catch (error) {
     console.error('상품 가격 정보 가져오기 오류:', error);
     return [];
+  }
+}
+
+/**
+ * 최적화된 데이터 로드: 전체 데이터를 한 번만 로드하고 메모리에서 기간별 분리
+ * @param currentStart 현재 기간 시작일
+ * @param currentEnd 현재 기간 종료일  
+ * @param previousStart 이전 기간 시작일
+ * @param previousEnd 이전 기간 종료일
+ * @returns 현재 기간과 이전 기간 데이터
+ */
+export async function fetchOptimizedSalesData(
+  currentStart: Date,
+  currentEnd: Date,
+  previousStart: Date,
+  previousEnd: Date
+): Promise<{
+  currentPeriodData: SalesItem[];
+  previousPeriodData: SalesItem[];
+}> {
+  try {
+    // 전체 기간 계산 (가장 이른 날짜부터 가장 늦은 날짜까지)
+    const overallStart = new Date(Math.min(currentStart.getTime(), previousStart.getTime()));
+    const overallEnd = new Date(Math.max(currentEnd.getTime(), previousEnd.getTime()));
+    
+    console.log('🚀 최적화된 데이터 로드 시작:', {
+      overall: `${overallStart.toISOString()} ~ ${overallEnd.toISOString()}`,
+      current: `${currentStart.toISOString()} ~ ${currentEnd.toISOString()}`,
+      previous: `${previousStart.toISOString()} ~ ${previousEnd.toISOString()}`
+    });
+
+    // 전체 데이터를 한 번만 로드 (캐시 확인)
+    const cacheKey = getCacheKey(overallStart, overallEnd);
+    let allData = getCachedData(cacheKey);
+    
+    if (!allData) {
+      console.log('📊 전체 데이터 로드 중...');
+      allData = await fetchAllSalesData(overallStart, overallEnd);
+      console.log(`✅ 전체 데이터 로드 완료: ${allData.length}개 항목`);
+    } else {
+      console.log(`💾 캐시에서 데이터 로드: ${allData.length}개 항목`);
+    }
+
+    // 메모리에서 현재 기간 데이터 필터링
+    const currentPeriodData = filterDataByDateRange(allData, currentStart, currentEnd);
+    console.log(`📈 현재 기간 데이터: ${currentPeriodData.length}개 항목`);
+    
+    // 메모리에서 이전 기간 데이터 필터링  
+    const previousPeriodData = filterDataByDateRange(allData, previousStart, previousEnd);
+    console.log(`📉 이전 기간 데이터: ${previousPeriodData.length}개 항목`);
+
+    return {
+      currentPeriodData,
+      previousPeriodData
+    };
+  } catch (error) {
+    console.error('❌ 최적화된 데이터 로드 실패:', error);
+    
+    // 실패 시 기존 방식으로 폴백
+    console.log('🔄 기존 방식으로 폴백...');
+    const [currentPeriodData, previousPeriodData] = await Promise.all([
+      fetchAllSalesData(currentStart, currentEnd),
+      fetchAllSalesData(previousStart, previousEnd)
+    ]);
+    
+    return {
+      currentPeriodData,
+      previousPeriodData
+    };
+  }
+}
+
+/**
+ * DB에서 최적화된 데이터 로드: 전체 데이터를 한 번만 로드하고 메모리에서 기간별 분리
+ * @param currentStart 현재 기간 시작일
+ * @param currentEnd 현재 기간 종료일  
+ * @param previousStart 이전 기간 시작일
+ * @param previousEnd 이전 기간 종료일
+ * @returns 현재 기간과 이전 기간 데이터
+ */
+export async function fetchOptimizedSalesDataFromDB(
+  currentStart: Date,
+  currentEnd: Date,
+  previousStart: Date,
+  previousEnd: Date
+): Promise<{
+  currentPeriodData: SalesItem[];
+  previousPeriodData: SalesItem[];
+}> {
+  try {
+    // 전체 기간 계산 (가장 이른 날짜부터 가장 늦은 날짜까지)
+    const overallStart = new Date(Math.min(currentStart.getTime(), previousStart.getTime()));
+    const overallEnd = new Date(Math.max(currentEnd.getTime(), previousEnd.getTime()));
+    
+    console.log('🚀 DB에서 최적화된 데이터 로드 시작:', {
+      overall: `${overallStart.toISOString()} ~ ${overallEnd.toISOString()}`,
+      current: `${currentStart.toISOString()} ~ ${currentEnd.toISOString()}`,
+      previous: `${previousStart.toISOString()} ~ ${previousEnd.toISOString()}`
+    });
+
+    // DB에서 전체 데이터를 한 번만 로드
+    const startDateStr = overallStart.toISOString().split('T')[0];
+    const endDateStr = overallEnd.toISOString().split('T')[0];
+    
+    const response = await fetch(`/api/analytics/sales-data?startDate=${startDateStr}&endDate=${endDateStr}`);
+    if (!response.ok) {
+      throw new Error('DB 데이터 로드 실패');
+    }
+    
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'DB 데이터 로드 실패');
+    }
+    
+    const allData = result.data || [];
+    console.log(`✅ DB에서 전체 데이터 로드 완료: ${allData.length}개 항목`);
+
+    // 메모리에서 현재 기간 데이터 필터링
+    const currentPeriodData = filterDataByDateRange(allData, currentStart, currentEnd);
+    console.log(`📈 현재 기간 데이터: ${currentPeriodData.length}개 항목`);
+    
+    // 메모리에서 이전 기간 데이터 필터링  
+    const previousPeriodData = filterDataByDateRange(allData, previousStart, previousEnd);
+    console.log(`📉 이전 기간 데이터: ${previousPeriodData.length}개 항목`);
+
+    return {
+      currentPeriodData,
+      previousPeriodData
+    };
+  } catch (error) {
+    console.error('❌ DB에서 최적화된 데이터 로드 실패:', error);
+    
+    // 실패 시 빈 배열 반환
+    return {
+      currentPeriodData: [],
+      previousPeriodData: []
+    };
   }
 }

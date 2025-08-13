@@ -15,31 +15,54 @@ export default function Home() {
     // 이미 로그인되어 있는지 확인
     const checkAuth = async () => {
       try {
-        // 인증 상태 확인
-        const { data } = await supabase.auth.getSession()
-        console.log('홈 페이지 세션 확인:', data.session ? '세션 있음' : '세션 없음')
+        console.log('홈페이지: 인증 확인 시작');
         
-        if (data.session) {
-          console.log('홈페이지: 세션 존재, 대시보드로 이동 시도')
-          // 인증 우회 파라미터 추가 (미들웨어 오작동 방지용)
-          window.location.href = '/dashboard?skip_auth=true'
-          return
+        // 먼저 기존 세션 확인
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('홈페이지: 세션 확인 오류:', sessionError);
         }
         
-        console.log('홈페이지: 세션 없음, 로그인 폼 표시')
-        setIsChecking(false)
+        // 세션이 있고 유효한 경우에만 새로고침 시도
+        if (session && session.expires_at && session.expires_at * 1000 > Date.now()) {
+          console.log('홈페이지: 유효한 세션 존재, 대시보드로 이동');
+          console.log('홈페이지: 사용자 ID:', session.user?.id);
+          window.location.href = '/analytics';
+          return;
+        }
+        
+        // 세션이 있지만 만료된 경우 새로고침 시도
+        if (session) {
+          try {
+            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+            
+            if (refreshError) {
+              console.error('홈페이지: 세션 새로고침 오류:', refreshError);
+            } else if (refreshData.session) {
+              console.log('홈페이지: 세션 새로고침 성공, 유효한 세션 존재');
+              console.log('홈페이지: 사용자 ID:', refreshData.session.user?.id);
+              window.location.href = '/analytics';
+              return;
+            }
+          } catch (refreshError) {
+            console.error('홈페이지: 세션 새로고침 중 오류:', refreshError);
+          }
+        }
+        
+        console.log('홈페이지: 세션 없음 또는 만료됨, 로그인 폼 표시');
+        setIsChecking(false);
       } catch (error) {
-        console.error('세션 확인 오류:', error)
-        setIsChecking(false)
+        console.error('홈페이지: 세션 확인 오류:', error);
+        setIsChecking(false);
       }
     }
     
-    // URL에 auth_redirect 파라미터가 있으면 세션 확인 스킵 (무한 루프 방지)
+    // URL에서 auth_redirect 파라미터 제거 (깔끔한 URL 유지)
     const url = new URL(window.location.href)
-    if (url.searchParams.get('auth_redirect') === 'true') {
-      console.log('리다이렉션 감지: 세션 확인 스킵')
-      setIsChecking(false)
-      return
+    if (url.searchParams.has('auth_redirect')) {
+      url.searchParams.delete('auth_redirect')
+      window.history.replaceState({}, '', url.toString())
     }
     
     checkAuth()

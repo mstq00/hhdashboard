@@ -237,92 +237,12 @@ export const fetchYearlyTotalSalesData = cache(async (year?: number) => {
       console.error('유료광고 수익 데이터 로드 실패:', error);
     }
 
-    // 3. 스토어 매출 데이터는 다른 API로부터 가져옴
-    console.log('스토어 매출 데이터 연동 준비...');
-    try {
-      console.log(`${currentYear}년 스토어 매출 데이터 가져오는 중...`);
-      
-      // 모든 스토어 판매 데이터를 한 번에 가져옴 (fetchAllSalesData는 이미 캐싱을 지원함)
-      const { fetchAllSalesData, filterValidSalesData, normalizeChannelName } = await import('@/lib/googleSheets');
-      const allSalesData = await fetchAllSalesData();
-      console.log(`총 ${allSalesData.length}개의 스토어 판매 데이터를 가져왔습니다.`);
-      
-      // 유효한 주문 상태의 데이터만 필터링 (취소, 반품, 미결제 취소 제외)
-      const validSalesData = filterValidSalesData(allSalesData);
-      console.log(`유효한 주문 상태의 데이터: ${validSalesData.length}/${allSalesData.length}`);
-      
-      // 매핑 서비스 초기화 및 데이터 로드
-      await mappingService.loadMappingData();
-      console.log('매핑 데이터 로드 완료');
-      
-      // 월별로 데이터 분류
-      for (let month = 1; month <= 12; month++) {
-        if (monthlyData[month]) {
-          try {
-            // 해당 월의 시작일과 끝일 계산
-            const startDate = new Date(currentYear, month - 1, 1);
-            const endDate = new Date(currentYear, month, 0); // 해당 월의 마지막 날
-            
-            // 해당 월의 유효한 데이터 필터링
-            const monthData = validSalesData.filter((item: SalesItem) => {
-              if (!item.orderDate) return false;
-              
-              const orderDate = new Date(item.orderDate);
-              return orderDate >= startDate && orderDate <= endDate;
-            });
-            
-            // 총 매출 계산
-            const totalSales = monthData.reduce((sum: number, item: SalesItem) => {
-              // 취소/반품 주문은 제외
-              if (['취소', '미결제취소', '반품'].includes(item.status || '')) {
-                return sum;
-              }
-
-              const quantity = parseInt(String(item.quantity)) || 0;
-              const originalProduct = item.productName || '';
-              const originalOption = item.optionName || '';
-              const channel = item.channel ? normalizeChannelName(item.channel) : '';
-              
-              if (!channel) {
-                console.log(`채널 정보 없음: ${originalProduct}`);
-                return sum;
-              }
-
-              const mappingInfo = mappingService.getMappedProductInfo(
-                originalProduct,
-                originalOption,
-                channel
-              );
-
-              if (mappingInfo && mappingInfo.price > 0) {
-                const sales = quantity * mappingInfo.price;
-                if (sales > 0) {
-                  console.log(`매출 계산: ${originalProduct} (${channel}) - 수량: ${quantity}, 가격: ${mappingInfo.price}, 매출: ${sales}`);
-                }
-                return sum + sales;
-              } else {
-                console.log(`매핑 정보 없음 또는 가격이 0: ${originalProduct} (${channel})`);
-              }
-              return sum;
-            }, 0);
-            
-            // 매출 데이터 저장
-            monthlyData[month].storeSales = totalSales;
-            console.log(`${month}월 스토어 매출: ${totalSales.toLocaleString()}원`);
-          } catch (error) {
-            console.error(`${month}월 스토어 매출 계산 중 오류:`, error);
-            monthlyData[month].storeSales = 0;
-          }
-        }
-      }
-      
-      console.log("스토어 매출 데이터 로드 완료");
-    } catch (error) {
-      console.error("스토어 매출 데이터 로드 실패:", error);
-    }
-
-    // 4. 월별 합계 계산
+    // 3. 스토어 매출 데이터는 통합 매출 API에서 직접 처리하므로 여기서는 제거
+    console.log('스토어 매출 데이터는 통합 매출 API에서 직접 처리됩니다.');
+    
+    // 4. 월별 합계 계산 (스토어 매출은 0으로 초기화, 통합 매출 API에서 채워짐)
     Object.values(monthlyData).forEach(data => {
+      data.storeSales = 0; // 통합 매출 API에서 채워질 예정
       data.totalSales = data.storeSales + data.adRevenue + data.groupSales;
     });
 
@@ -380,28 +300,65 @@ export const fetchTotalSalesDetailData = cache(async (month: number, year?: numb
     try {
       console.log(`스토어 매출 상세 데이터 가져오는 중...`);
       
-      // 스토어 매출 데이터 가져오기
-      const { fetchAllSalesData, filterValidSalesData } = await import('@/lib/googleSheets');
-      const allSalesData = await fetchAllSalesData();
-      const validSalesData = filterValidSalesData(allSalesData);
+      // Supabase 클라이언트 생성
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
       
       // 해당 월의 시작일과 끝일 계산
       const startDate = new Date(currentYear, month - 1, 1);
       const endDate = new Date(currentYear, month, 0); // 해당 월의 마지막 날
       
-      // 해당 월의 데이터 필터링
-      const monthData = validSalesData.filter(item => {
-        if (!item.orderDate) return false;
+      // DB에서 해당 월의 데이터 가져오기
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          channel,
+          order_number,
+          order_date,
+          customer_name,
+          customer_phone,
+          product_name,
+          product_option,
+          quantity,
+          unit_price,
+          total_price,
+          status,
+          product_order_number
+        `)
+        .gte('order_date', startDateStr)
+        .lte('order_date', endDateStr)
+        .order('order_date', { ascending: true });
+      
+      if (error) {
+        throw new Error(`DB 쿼리 오류: ${error.message}`);
+      }
+      
+      const allSalesData = data || [];
+      
+      // 유효한 데이터만 필터링
+      const validSalesData = allSalesData.filter(item => {
+        const isValid = item.order_number && 
+          item.order_date && 
+          item.product_name && 
+          item.quantity > 0;
         
-        const orderDate = new Date(item.orderDate);
-        return orderDate >= startDate && orderDate <= endDate;
+        if (!isValid) return false;
+        
+        const isCancelledOrder = ['취소', '환불', '미결제취소', '반품', '구매취소', '주문취소'].includes(item.status);
+        return !isCancelledOrder;
       });
       
       // 채널별 매출 집계
       const channelSales: {[key: string]: number} = {};
-      monthData.forEach(item => {
+      validSalesData.forEach(item => {
         const channel = item.channel || '기타';
-        const sales = item.totalSales || (item.price * item.quantity);
+        const sales = item.total_price || (item.unit_price * item.quantity);
         
         if (!channelSales[channel]) {
           channelSales[channel] = 0;
@@ -736,26 +693,76 @@ export async function fetchMonthlySalesData(year: number, month: number): Promis
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0);
     
+    // Supabase 클라이언트 생성
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // DB에서 해당 월의 데이터 가져오기
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+    
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        id,
+        channel,
+        order_number,
+        order_date,
+        customer_name,
+        customer_phone,
+        product_name,
+        product_option,
+        quantity,
+        unit_price,
+        total_price,
+        status,
+        product_order_number
+      `)
+      .gte('order_date', startDateStr)
+      .lte('order_date', endDateStr)
+      .order('order_date', { ascending: true });
+    
+    if (error) {
+      throw new Error(`DB 쿼리 오류: ${error.message}`);
+    }
+    
+    const allSalesData = data || [];
+    
+    // 유효한 데이터만 필터링
+    const validSalesData = allSalesData.filter(item => {
+      const isValid = item.order_number && 
+        item.order_date && 
+        item.product_name && 
+        item.quantity > 0;
+      
+      if (!isValid) return false;
+      
+      const isCancelledOrder = ['취소', '환불', '미결제취소', '반품', '구매취소', '주문취소'].includes(item.status);
+      return !isCancelledOrder;
+    });
+    
+    // 매핑 서비스 초기화
     const mappingService = new MappingService();
     await mappingService.loadMappingData();
     
-    // 스토어 매출 데이터는 Google Sheets에서 가져옴
-    const { fetchAllSalesData, filterValidSalesData, normalizeChannelName } = await import('@/lib/googleSheets');
-    const allSalesData = await fetchAllSalesData();
-    const validSalesData = filterValidSalesData(allSalesData);
-    
-    // 해당 월의 데이터 필터링
-    const monthlyData = validSalesData.filter((item: SalesItem) => {
-      if (!item.orderDate) return false;
-      const orderDate = new Date(item.orderDate);
-      return orderDate >= startDate && orderDate <= endDate;
-    });
+    // 채널명 정규화 함수
+    const normalizeChannelName = (channel: string) => {
+      const channelMap: Record<string, string> = {
+        'smartstore': 'smartstore',
+        'ohouse': 'ohouse', 
+        'ytshopping': 'ytshopping',
+        'coupang': 'coupang'
+      };
+      return channelMap[channel.toLowerCase()] || channel.toLowerCase();
+    };
 
     // 매핑 정보 적용
-    const processedData = monthlyData.map((item: SalesItem) => {
+    const processedData = validSalesData.map((item: any) => {
       const mappingInfo = mappingService.getMappedProductInfo(
-        item.productName,
-        item.optionName,
+        item.product_name,
+        item.product_option,
         item.channel
       );
       
@@ -791,7 +798,7 @@ export async function fetchMonthlySalesData(year: number, month: number): Promis
       if (!channelSales[normalizedChannel]) {
         channelSales[normalizedChannel] = 0;
       }
-      channelSales[normalizedChannel] += (item.totalSales || (item.price * item.quantity) || 0);
+      channelSales[normalizedChannel] += (item.totalSales || (item.unit_price * item.quantity) || 0);
     });
     
     // 노션에서 공동구매 및 유료광고 데이터 가져오기

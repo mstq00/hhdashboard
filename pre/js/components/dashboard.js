@@ -636,23 +636,23 @@ export class Dashboard {
             if (this.periodChart) {
                 this.periodChart.destroy();
             }
-            
+
             // 2. 기간 필터링
             const startDate = this.getDateWithoutTime(this.startDate);
             const endDate = this.getDateWithoutTime(this.endDate);
-            
+                
             const filteredData = data.filter(item => {
                 const date = new Date(item.date);
                 const itemDate = this.getDateWithoutTime(date);
-                return itemDate >= startDate && itemDate <= endDate;
-            });
+                    return itemDate >= startDate && itemDate <= endDate;
+                });
             
             // 3. 차트 데이터 구조 초기화
             const salesData = {};
             
             // 주문 중복 처리를 위한 Set
             const processedOrders = new Set();
-            
+
             // 4. 날짜별 데이터 초기화 및 집계
             filteredData.forEach(item => {
                 const date = new Date(item.date);
@@ -693,21 +693,21 @@ export class Dashboard {
                     const orderKey = `${dateKey}-${item.orderNumber}-${channel}`;
                     if (!processedOrders.has(orderKey) && !['취소', '미결제취소', '반품'].includes(item.orderStatus)) {
                         processedOrders.add(orderKey);
-                        
-                        const mappingInfo = this.dataService.mappingService.getMappedProductInfo(
+                    
+                    const mappingInfo = this.dataService.mappingService.getMappedProductInfo(
                             item.originalProduct || item.productName || '',
                             item.originalOption || '',
-                            channel
-                        );
-                        
-                        if (mappingInfo) {
+                        channel
+                    );
+
+                    if (mappingInfo) {
                             const price = mappingInfo.price || 0;
                             const quantity = parseInt(item.quantity) || 0;
                             const sales = price * quantity;
-                            
+
                             // NaN 체크
                             if (!isNaN(sales) && sales > 0) {
-                                salesData[dateKey].sales[channel] += sales;
+                        salesData[dateKey].sales[channel] += sales;
                                 salesData[dateKey].orders += 1;
                             }
                         }

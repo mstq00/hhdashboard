@@ -3,10 +3,82 @@
  */
 
 /**
- * 기간에 따른 날짜 범위를 계산합니다.
+ * 날짜를 한국시간으로 변환합니다.
+ * DB의 order_date는 실제로는 KST이지만 +00:00으로 표시되어 있으므로 KST로 처리합니다.
+ */
+export function toKoreanTime(date: Date | string): Date {
+  try {
+    if (typeof date === 'string') {
+      // 빈 문자열이나 null 체크
+      if (!date || date.trim() === '') {
+        console.warn('🔍 toKoreanTime: 빈 날짜 문자열 입력됨');
+        return new Date();
+      }
+
+      // DB에 저장된 시간이 실제로는 KST인데 +00:00으로 표시되는 경우
+      // (예: "2025-07-25T18:20:00+00:00"는 실제로는 KST 2025/07/25 18:20)
+      if (date.includes('+00:00')) {
+        // +00:00을 제거하고 +09:00을 명시적으로 추가하여 KST로 해석
+        const kstDateString = date.replace('+00:00', '+09:00');
+        const result = new Date(kstDateString);
+        
+        if (isNaN(result.getTime())) {
+          console.warn('🔍 toKoreanTime: 잘못된 KST 날짜 문자열:', date);
+          return new Date();
+        }
+        
+
+        return result;
+      }
+      // 이미 한국시간으로 저장된 경우 (예: "2025-07-01T00:02:40")
+      else if (date.includes('T') && !date.includes('Z') && !date.includes('+')) {
+        // 단순히 Date 객체로 변환 (서버가 한국 리전이므로 자동으로 KST로 해석됨)
+        const result = new Date(date);
+        
+        // 유효한 날짜인지 확인
+        if (isNaN(result.getTime())) {
+          console.warn('🔍 toKoreanTime: 잘못된 KST 날짜 문자열:', date);
+          return new Date();
+        }
+        return result;
+      }
+      // UTC 시간인 경우 (예: "2025-07-01T00:02:40.000Z")
+      else if (date.includes('T') && date.includes('Z')) {
+        const utcDate = new Date(date);
+        if (isNaN(utcDate.getTime())) {
+          console.warn('🔍 toKoreanTime: 잘못된 UTC 날짜 문자열:', date);
+          return new Date();
+        }
+        const result = new Date(utcDate.getTime() + (9 * 60 * 60 * 1000));
+        return result;
+      } else {
+        // 일반 날짜 문자열인 경우
+        const result = new Date(date);
+        if (isNaN(result.getTime())) {
+          console.warn('🔍 toKoreanTime: 잘못된 일반 날짜 문자열:', date);
+          return new Date();
+        }
+        return result;
+      }
+    } else {
+      // Date 객체인 경우
+      if (isNaN(date.getTime())) {
+        console.warn('🔍 toKoreanTime: 잘못된 Date 객체');
+        return new Date();
+      }
+      return date;
+    }
+  } catch (error) {
+    console.error('🔍 toKoreanTime 함수 오류:', error, '입력값:', date);
+    return new Date();
+  }
+}
+
+/**
+ * 기간에 따른 날짜 범위를 계산합니다. (한국시간 기준)
  */
 export function calculateDateRange(period: string): { startDate: Date | null; endDate: Date | null } {
-  const today = new Date();
+  const today = new Date(); // 시스템 시간 사용 (한국시간으로 가정)
   let startDate: Date, endDate: Date;
 
   switch (period) {
