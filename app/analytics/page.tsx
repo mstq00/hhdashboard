@@ -707,11 +707,15 @@ export default function DashboardPage() {
       // 유효한 데이터만 필터링
       const validCurrentData = filterValidSalesData(currentPeriodData);
       const validPreviousData = filterValidSalesData(previousPeriodData);
+
+      // 안전장치: 서버가 반환한 범위에 예외가 섞여 있어도 KST 기준으로 한 번 더 날짜 범위 필터링
+      const validCurrentDataInRange = filterDataByDateRange(validCurrentData, currentStart, currentEnd);
+      const validPreviousDataInRange = filterDataByDateRange(validPreviousData, previousStart, previousEnd);
       
-      setFilteredData(validCurrentData);
+      setFilteredData(validCurrentDataInRange);
       
       // 즉시 모든 데이터 처리
-      await processAllDashboardData(validCurrentData, validPreviousData, previousStart, previousEnd);
+      await processAllDashboardData(validCurrentDataInRange, validPreviousDataInRange, previousStart, previousEnd);
       
       setIsLoading(false);
     } catch (error) {
