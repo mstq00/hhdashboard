@@ -22,9 +22,9 @@ async function fetchSalesDataFromDBDirectly(startDate: Date, endDate: Date) {
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
     
-    // Supabase 쿼리용 KST 날짜 문자열 생성 (DB의 order_date 형식과 맞춤)
-    const startDateKST = `${startDateTime.getFullYear()}-${String(startDateTime.getMonth() + 1).padStart(2, '0')}-${String(startDateTime.getDate()).padStart(2, '0')}T00:00:00+00:00`;
-    const endDateKST = `${endDateTime.getFullYear()}-${String(endDateTime.getMonth() + 1).padStart(2, '0')}-${String(endDateTime.getDate()).padStart(2, '0')}T23:59:59+00:00`;
+    // Supabase 쿼리용 KST 날짜 문자열 생성 (스토어 매출 분석과 동일하게 +09:00 사용)
+    const startDateKST = `${startDateTime.getFullYear()}-${String(startDateTime.getMonth() + 1).padStart(2, '0')}-${String(startDateTime.getDate()).padStart(2, '0')}T00:00:00+09:00`;
+    const endDateKST = `${endDateTime.getFullYear()}-${String(endDateTime.getMonth() + 1).padStart(2, '0')}-${String(endDateTime.getDate()).padStart(2, '0')}T23:59:59+09:00`;
     
     // 배치로 모든 데이터 가져오기
     let allData: any[] = [];
@@ -304,12 +304,121 @@ export async function GET(request: Request) {
       // 해당 월의 공동구매 매출 상세 정보 가져오기
       const groupSalesDetails = await fetchGroupSalesDetails(year, month);
       
+      // 해당 월의 스토어 매출 상세 정보 가져오기 (채널별 분리)
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0); // 해당 월의 마지막 날
+      const monthSalesData = await fetchSalesDataFromDBDirectly(startDate, endDate);
+      const validMonthSalesData = filterValidSalesData(monthSalesData);
+      
+      // 매핑 서비스 초기화
+      const mappingService = new MappingService();
+      await mappingService.loadMappingData();
+      
+      // 채널별 스토어 매출 및 영업이익 계산 (스토어 매출 분석과 동일한 로직)
+      const channelData: Record<string, { sales: number, profit: number }> = {};
+      
+      for (const item of validMonthSalesData) {
+        if (!item.order_date) continue;
+        
+        const { toKoreanTime } = await import('@/lib/utils/dateUtils');
+        const orderDate = toKoreanTime(item.order_date);
+        
+        // 주문일 기준 가격 적용을 위한 날짜 문자열 생성
+        const orderDateForPricing = (() => {
+          try {
+            const y = orderDate.getFullYear();
+            const m = String(orderDate.getMonth() + 1).padStart(2, '0');
+            const d = String(orderDate.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+          } catch {
+            return undefined;
+          }
+        })();
+        
+        const mappingInfo = mappingService.getMappedProductInfo(
+          item.product_name,
+          item.product_option,
+          item.channel,
+          orderDateForPricing
+        );
+        
+        // 취소/환불/미결제취소 상태인지 확인 (스토어 매출 분석과 동일)
+        const isCancelledOrder = ['취소', '환불', '미결제취소', '반품', '구매취소', '주문취소'].includes(item.status);
+        
+        // 매핑 정보가 있고 유효한 주문인 경우 가격 계산 적용 (스토어 매출 분석과 동일)
+        if (mappingInfo && !isCancelledOrder) {
+          const quantity = item.quantity || 0;
+          const mappedPrice = mappingInfo.price || 0;
+          const mappedCost = mappingInfo.cost || 0;
+          const commissionRate = mappingInfo.fee || 0;
+          
+          // 매출액 계산
+          const totalSales = mappedPrice * quantity;
+          
+          // 순이익 계산 (매출액 - 공급가)
+          const netProfit = (mappedPrice - mappedCost) * quantity;
+          
+          // 수수료 금액 계산
+          const commissionAmount = totalSales * (commissionRate / 100);
+          
+          // 영업이익 계산 (순이익 - 수수료)
+          const operatingProfit = netProfit - commissionAmount;
+          
+          // 채널명 정규화
+          const channelName = item.channel === 'smartstore' ? '스마트스토어' :
+                             item.channel === 'ohouse' ? '오늘의집' :
+                             item.channel === 'YTshopping' || item.channel === 'ytshopping' ? '유튜브쇼핑' :
+                             item.channel === 'coupang' ? '쿠팡' : item.channel;
+          
+          if (!channelData[channelName]) {
+            channelData[channelName] = { sales: 0, profit: 0 };
+          }
+          
+          channelData[channelName].sales += totalSales;
+          channelData[channelName].profit += operatingProfit;
+        }
+      }
+      
+      // 상세 데이터 생성
+      const detailsArray = [];
+      
+      // 스토어 매출 채널별 추가
+      Object.entries(channelData).forEach(([channel, data]) => {
+        detailsArray.push({
+          channel: channel,
+          category: '스토어 매출',
+          amount: data.sales,
+          profit: data.profit
+        });
+      });
+      
+      // 광고 매출 추가
+      adRevenueDetails.forEach((adItem: any) => {
+        detailsArray.push({
+          channel: '유료 광고',
+          category: adItem.name || '광고 수익',
+          amount: adItem.amount,
+          profit: adItem.amount
+        });
+      });
+      
+      // 공동구매 매출 추가
+      groupSalesDetails.forEach((groupItem: any) => {
+        detailsArray.push({
+          channel: '공동구매',
+          category: groupItem.name || '공동구매 매출',
+          amount: groupItem.salesAmount,
+          profit: groupItem.settlementAmount
+        });
+      });
+      
       return NextResponse.json({
         success: true,
         data: detailData,
         settlementAmount: settlementAmount,
         adRevenueDetails: adRevenueDetails,
         groupSalesDetails: groupSalesDetails,
+        details: detailsArray,
         year,
         month,
       });
@@ -318,9 +427,9 @@ export async function GET(request: Request) {
     // 연간 데이터 준비
     const currentYear = year || new Date().getFullYear();
     
-    // 1. DB에서 스토어 판매 데이터 가져오기 (최근 1년)
-    const endDate = new Date();
-    const startDate = subMonths(endDate, 12);
+    // 1. DB에서 스토어 판매 데이터 가져오기 (해당 연도 전체)
+    const startDate = new Date(currentYear, 0, 1); // 해당 연도 1월 1일
+    const endDate = new Date(currentYear, 11, 31); // 해당 연도 12월 31일
     const allSalesData = await fetchSalesDataFromDBDirectly(startDate, endDate);
     const validSalesData = filterValidSalesData(allSalesData);
     
@@ -391,21 +500,37 @@ export async function GET(request: Request) {
       
       // 조회 연도에 해당하는 데이터만 처리
       if (itemYear === currentYear && itemMonth >= 1 && itemMonth <= 12) {
-        // 매핑 정보 가져오기
+        // 매핑 정보 가져오기 (주문일 기준 가격 적용)
+        // 한국시간 기준으로 YYYY-MM-DD 문자열 생성
+        const orderDateForPricing = (() => {
+          try {
+            const y = orderDate.getFullYear();
+            const m = String(orderDate.getMonth() + 1).padStart(2, '0');
+            const d = String(orderDate.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+          } catch {
+            return undefined;
+          }
+        })();
+
         const mappingInfo = mappingService.getMappedProductInfo(
           item.product_name,
           item.product_option,
-          item.channel
+          item.channel,
+          orderDateForPricing
         );
 
-        // 매핑 정보가 있는 경우에만 매출 계산
-        if (mappingInfo && mappingInfo.price > 0) {
+        // 취소/환불/미결제취소 상태인지 확인 (스토어 매출 분석과 동일)
+        const isCancelledOrder = ['취소', '환불', '미결제취소', '반품', '구매취소', '주문취소'].includes(item.status);
+        
+        // 매핑 정보가 있고 유효한 주문인 경우 가격 계산 적용 (스토어 매출 분석과 동일)
+        if (mappingInfo && !isCancelledOrder) {
           const quantity = item.quantity || 0;
           const mappedPrice = mappingInfo.price || 0;
           const mappedCost = mappingInfo.cost || 0;
           const commissionRate = mappingInfo.fee || 0;
           
-          // 매출액 계산 (매핑된 가격 * 수량)
+          // 매출액 계산
           const totalSales = mappedPrice * quantity;
           
           // 순이익 계산 (매출액 - 공급가)

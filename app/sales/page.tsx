@@ -181,140 +181,8 @@ function TotalSalesContent() {
         throw new Error(result.error || '상세 데이터를 가져오는 중 오류가 발생했습니다.');
       }
       
-      // 실제 계산된 데이터로 상세내역 생성
-      const finalData = [];
-      
-      // 스토어 매출이 있는 경우 채널별로 분리
-      if (monthData.storeSales > 0) {
-        // 스토어 매출 분석 API에서 해당 월의 채널별 데이터 가져오기
-        try {
-          const startDate = `${selectedYear}-${String(monthData.month).padStart(2, '0')}-01`;
-          // 해당 월의 마지막 날짜를 한국시간 기준으로 계산
-          const lastDayOfMonth = new Date(selectedYear, monthData.month, 0);
-          const endDate = `${lastDayOfMonth.getFullYear()}-${String(lastDayOfMonth.getMonth() + 1).padStart(2, '0')}-${String(lastDayOfMonth.getDate()).padStart(2, '0')}`;
-          
-          const salesResponse = await fetch(`/api/analytics/sales-data?startDate=${startDate}&endDate=${endDate}`);
-          if (salesResponse.ok) {
-            const salesResult = await salesResponse.json();
-            if (salesResult.success && salesResult.data) {
-              // 채널별로 그룹화 (매출액과 영업이익)
-              const channelData: Record<string, { sales: number, profit: number }> = {};
-              salesResult.data.forEach((item: any) => {
-                if (item.totalSales > 0) {
-                  const channel = item.channel === 'smartstore' ? '스마트스토어' :
-                                 item.channel === 'ohouse' ? '오늘의집' :
-                                 item.channel === 'YTshopping' ? '유튜브쇼핑' :
-                                 item.channel === 'ytshopping' ? '유튜브쇼핑' :
-                                 item.channel === 'coupang' ? '쿠팡' : item.channel;
-                  
-                  if (!channelData[channel]) {
-                    channelData[channel] = { sales: 0, profit: 0 };
-                  }
-                  channelData[channel].sales += item.totalSales;
-                  channelData[channel].profit += (item.operatingProfit || 0);
-                }
-              });
-              
-              // 채널별 데이터 추가
-              Object.entries(channelData).forEach(([channel, data]) => {
-                finalData.push({
-                  channel: channel,
-                  category: '스토어 매출',
-                  amount: data.sales,
-                  profit: data.profit
-                });
-              });
-            }
-          }
-        } catch (error) {
-          console.error('스토어 매출 상세 데이터 조회 오류:', error);
-          // 오류 시 전체 스토어 매출로 표시 (영업이익은 비례 계산)
-          const storeProfitRatio = monthData.expectedProfit / monthData.storeSales;
-          finalData.push({
-            channel: '스토어',
-            category: '스토어 매출',
-            amount: monthData.storeSales,
-            profit: monthData.storeSales * storeProfitRatio
-          });
-        }
-      }
-      
-      // 광고 매출 추가 (광고 수익은 그대로 예상이익)
-      if (monthData.adRevenue > 0) {
-        // 광고 매출의 이름 가져오기
-        try {
-          const adRevenueResponse = await fetch(`/api/notion/total-sales?year=${selectedYear}&month=${monthData.month}`);
-          if (adRevenueResponse.ok) {
-            const adResult = await adRevenueResponse.json();
-            if (adResult.success && adResult.adRevenueDetails) {
-              // 광고 매출 상세 정보가 있으면 이름 사용
-              adResult.adRevenueDetails.forEach((adItem: any) => {
-                finalData.push({
-                  channel: '유료 광고',
-                  category: adItem.name || '광고 수익',
-                  amount: adItem.amount || monthData.adRevenue,
-                  profit: adItem.amount || monthData.adRevenue
-                });
-              });
-            } else {
-              // 상세 정보가 없으면 기본값
-              finalData.push({
-                channel: '유료 광고',
-                category: '광고 수익',
-                amount: monthData.adRevenue,
-                profit: monthData.adRevenue
-              });
-            }
-          }
-        } catch (error) {
-          // 오류 시 기본값
-          finalData.push({
-            channel: '유료 광고',
-            category: '광고 수익',
-            amount: monthData.adRevenue,
-            profit: monthData.adRevenue
-          });
-        }
-      }
-      
-      // 공동구매 매출 추가 (정산금액을 예상이익으로 사용)
-      if (monthData.groupSales > 0) {
-        // 공동구매 정산금액과 이름 가져오기
-        try {
-          const groupSettlementResponse = await fetch(`/api/notion/total-sales?year=${selectedYear}&month=${monthData.month}`);
-          if (groupSettlementResponse.ok) {
-            const settlementResult = await groupSettlementResponse.json();
-            if (settlementResult.success && settlementResult.groupSalesDetails) {
-              // 공동구매 상세 정보가 있으면 이름과 정산금액 사용
-              settlementResult.groupSalesDetails.forEach((groupItem: any) => {
-                finalData.push({
-                  channel: '공동구매',
-                  category: groupItem.name || '공동구매 매출',
-                  amount: groupItem.salesAmount || monthData.groupSales,
-                  profit: groupItem.settlementAmount || (monthData.groupSales * 0.3)
-                });
-              });
-            } else {
-              // 상세 정보가 없으면 기본값
-              const settlementAmount = settlementResult.data?.settlementAmount || (monthData.groupSales * 0.3);
-              finalData.push({
-                channel: '공동구매',
-                category: '공동구매 매출',
-                amount: monthData.groupSales,
-                profit: settlementAmount
-              });
-            }
-          }
-        } catch (error) {
-          // 오류 시 매출액의 30%를 예상이익으로 계산
-          finalData.push({
-            channel: '공동구매',
-            category: '공동구매 매출',
-            amount: monthData.groupSales,
-            profit: monthData.groupSales * 0.3
-          });
-        }
-      }
+      // 서버에서 계산된 상세 데이터 사용
+      const finalData = result.details || [];
       
       // 상세 데이터 업데이트
       setMonthlyData(prevData => {
@@ -333,13 +201,18 @@ function TotalSalesContent() {
       // 오류 상태 업데이트 - 오류가 발생해도 기본 상세 데이터를 생성
       const errorData = [];
       
+      // 서버에서 예상이익액을 정확히 계산했으므로, 각 항목의 비율에 맞춰 분배
+      const totalRevenue = monthData.storeSales + monthData.adRevenue + monthData.groupSales;
+      
       if (monthData.storeSales > 0) {
-        const storeProfitRatio = monthData.expectedProfit / monthData.storeSales;
+        // 스토어 매출의 예상이익은 전체에서 비례 계산
+        const storeProfit = totalRevenue > 0 ? 
+          (monthData.storeSales / totalRevenue) * monthData.expectedProfit : 0;
         errorData.push({
           channel: '스토어',
           category: '스토어 매출',
           amount: monthData.storeSales,
-          profit: monthData.storeSales * storeProfitRatio
+          profit: storeProfit
         });
       }
       
@@ -353,6 +226,7 @@ function TotalSalesContent() {
       }
       
       if (monthData.groupSales > 0) {
+        // 공동구매는 일반적으로 매출의 30%를 정산금액으로 사용
         errorData.push({
           channel: '공동구매',
           category: '공동구매 매출',
@@ -380,7 +254,7 @@ function TotalSalesContent() {
     setSelectedYear(yearValue);
     
     // URL 업데이트
-    router.push(`/dashboard/total-sales?year=${yearValue}&skip_auth=true`);
+    router.push(`/sales?year=${yearValue}`);
     
     // 데이터 로드
     loadData(yearValue);

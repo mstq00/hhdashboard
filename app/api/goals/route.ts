@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
         current_value: 0,
         status: 'pending',
         keyword: body.keyword || null,
+        parent_goal_id: body.parentGoalId || null,
         user_id: 'sample-user' // TODO: 실제 사용자 ID로 변경
       }])
       .select()

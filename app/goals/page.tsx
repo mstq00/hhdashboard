@@ -1698,32 +1698,27 @@ export default function GoalsPage() {
         }}
         initialData={editingGoal || undefined}
         parentGoal={parentGoal || undefined}
-        onSubmit={(goalData) => {
+        onSubmit={async (goalData) => {
           if (editingGoal) {
             console.log('목표 수정:', goalData)
             // TODO: API 호출로 목표 수정
           } else {
-            console.log('새 목표 생성:', goalData)
-            // 새 목표를 목록에 추가
-            const newGoal: Goal = {
-              id: Date.now().toString(),
-              title: goalData.title,
-              status: 'pending',
-              progress: 0,
-              organization: goalData.organization,
-              assignee: goalData.assignee,
-              period: `${goalData.startDate} ~ ${goalData.endDate}`,
-              cycle: goalData.cycleId,
-              keyword: goalData.keyword,
-              hasMetric: goalData.hasMetric,
-              metricName: goalData.metricName,
-              startValue: goalData.startValue ? parseFloat(goalData.startValue) : undefined,
-              targetValue: goalData.targetValue ? parseFloat(goalData.targetValue) : undefined,
-              currentValue: 0,
-              description: goalData.description,
-              parentGoalId: goalData.parentGoalId
+            try {
+              const res = await fetch('/api/goals', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(goalData)
+              })
+              if (!res.ok) {
+                const err = await res.text()
+                console.error('목표 생성 실패:', err)
+              } else {
+                // 서버 반영 후 목록 재로딩
+                await loadGoals()
+              }
+            } catch (e) {
+              console.error('목표 생성 오류:', e)
             }
-            setMockGoals(prev => [newGoal, ...prev])
           }
           setEditingGoal(null)
           setParentGoal(null)

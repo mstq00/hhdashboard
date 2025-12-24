@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as XLSX from 'xlsx-populate';
+import * as XLSX from 'xlsx';
 import { createServiceClient } from '@/lib/supabase';
 
 // Excel 날짜를 ISO 형식으로 변환하는 함수
@@ -223,47 +223,112 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '채널 정보가 필요합니다.' }, { status: 400 });
     }
 
-          console.log('파일 처리 시작:', {
+                console.log('파일 처리 시작:', {
         fileName: file.name,
         fileSize: file.size,
+        fileType: file.type,
         channel: channel,
         hasPassword: !!password,
-        password: password || '없음'
+        password: password || '없음',
+        passwordLength: password ? password.length : 0,
+        passwordType: typeof password
       });
 
-    try {
-      const buffer = await file.arrayBuffer();
-      let workbook;
-
-      if (password) {
-        workbook = await XLSX.fromDataAsync(buffer, { 
-          password,
-          dateNF: 'yyyy/mm/dd hh:mm' // 날짜 형식 지정
-        });
-      } else {
-        workbook = await XLSX.fromDataAsync(buffer, {
-          dateNF: 'yyyy/mm/dd hh:mm' // 날짜 형식 지정
-        });
+      // 파일 크기 확인
+      if (file.size === 0) {
+        return NextResponse.json({ error: '빈 파일입니다.' }, { status: 400 });
       }
 
-      // 첫 번째 시트 사용
-      const worksheet = workbook.sheet(0);
-      if (!worksheet) {
-        return NextResponse.json({ error: '시트를 찾을 수 없습니다.' }, { status: 400 });
+      // 파일 형식 확인
+      const validExtensions = ['.xlsx', '.xls', '.csv'];
+      const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+      if (!validExtensions.includes(fileExtension)) {
+        return NextResponse.json({ 
+          error: '지원되지 않는 파일 형식입니다. Excel 파일(.xlsx, .xls) 또는 CSV 파일을 업로드해주세요.' 
+        }, { status: 400 });
       }
 
-      const range = worksheet.usedRange();
-      if (!range) {
-        return NextResponse.json({ error: '데이터가 없는 시트입니다.' }, { status: 400 });
-      }
+      try {
+        const buffer = await file.arrayBuffer();
+        let jsonData: any[] | null = null;
+        let detectedSheetName: string | null = null;
 
-      const rows = range.value();
-      if (!rows || rows.length === 0) {
-        return NextResponse.json({ error: '데이터가 없습니다.' }, { status: 400 });
-      }
+        // 1) SheetJS로 먼저 시도 (password 전달 가능 환경에서 활용)
+        try {
+          console.log('SheetJS로 파일 읽기 시도');
+          const wb = XLSX.read(buffer, {
+            type: 'buffer',
+            cellDates: true,
+            dateNF: 'yyyy/mm/dd hh:mm',
+            ...(password && password.trim() !== '' ? { password: password.trim() } : {})
+          } as any);
+          const sheetNames = wb.SheetNames;
+          if (!sheetNames || sheetNames.length === 0) {
+            return NextResponse.json({ error: '시트를 찾을 수 없습니다.' }, { status: 400 });
+          }
+          detectedSheetName = sheetNames[0];
+          const worksheet = wb.Sheets[detectedSheetName];
+          if (!worksheet) {
+            return NextResponse.json({ error: '시트를 찾을 수 없습니다.' }, { status: 400 });
+          }
+          jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        } catch (sheetjsErr: any) {
+          console.warn('SheetJS 읽기 실패, xlsx-populate 폴백 시도:', sheetjsErr?.message || sheetjsErr);
 
-      const headers = rows[0];
-      const dataRows = rows.slice(1);
+          // 2) xlsx-populate로 폴백 (암호 해제 시도)
+          if (password && password.trim() !== '') {
+            try {
+              const mod: any = await import('xlsx-populate');
+              const XlsxPopulate = mod.default || mod;
+              const nodeBuffer = Buffer.from(new Uint8Array(buffer));
+              const wb2 = await XlsxPopulate.fromDataAsync(nodeBuffer, { password: password.trim() });
+              const sheet = wb2.sheet(0);
+              if (!sheet) {
+                return NextResponse.json({ error: '시트를 찾을 수 없습니다.' }, { status: 400 });
+              }
+              const range = sheet.usedRange();
+              if (!range) {
+                return NextResponse.json({ error: '데이터가 없는 시트입니다.' }, { status: 400 });
+              }
+              const values = range.value();
+              jsonData = Array.isArray(values) ? values : null;
+              detectedSheetName = 'Sheet1';
+              console.log('xlsx-populate로 암호 해제 및 읽기 성공');
+            } catch (xppErr: any) {
+              console.error('xlsx-populate 폴백 실패:', xppErr?.message || xppErr);
+              if (xppErr?.message?.includes('central directory') || xppErr?.message?.toLowerCase?.().includes('zip')) {
+                return NextResponse.json({ 
+                  error: '파일이 손상되었거나 지원되지 않는 Excel 형식입니다. 파일을 다시 저장한 후 업로드해주세요.',
+                  details: xppErr.message 
+                }, { status: 400 });
+              }
+              return NextResponse.json({ 
+                success: false,
+                error: '입력한 비밀번호로 엑셀 암호를 해제할 수 없습니다. 비밀번호를 다시 확인하거나, 파일의 암호를 제거/CSV로 저장 후 업로드해주세요.',
+                code: 'ENCRYPTED_XLSX_NOT_SUPPORTED'
+              }, { status: 400 });
+            }
+          } else {
+            if (sheetjsErr?.message?.toLowerCase?.().includes('password')) {
+              return NextResponse.json({ 
+                success: false,
+                error: '이 파일은 비밀번호로 보호되어 있습니다. 비밀번호를 입력해주세요.',
+                code: 'PASSWORD_REQUIRED' 
+              }, { status: 400 });
+            }
+            return NextResponse.json({ 
+              error: '파일을 읽을 수 없습니다. 파일 형식 또는 내용을 확인해주세요.',
+              details: sheetjsErr?.message || 'Unknown error' 
+            }, { status: 400 });
+          }
+        }
+
+        if (!jsonData || jsonData.length === 0) {
+          return NextResponse.json({ error: '데이터가 없습니다.' }, { status: 400 });
+        }
+
+        const headers = jsonData[0];
+        const dataRows = jsonData.slice(1);
 
       // 헤더에서 undefined 값 제거
       const cleanHeaders = headers.filter((header: any) => header !== undefined && header !== null && header !== '');
@@ -272,7 +337,7 @@ export async function POST(request: NextRequest) {
         totalRows: dataRows.length,
         originalHeaders: headers,
         cleanHeaders: cleanHeaders,
-        sheetName: worksheet.name(),
+        sheetName: detectedSheetName,
         channel: channel
       });
 
@@ -904,7 +969,8 @@ function analyzeDuplicates(data: any[], channel: string, headers: string[], mapp
     orderNumberDuplicateList: orderNumberDuplicates,
     exactDuplicates: exactDuplicates.size,
     exactDuplicateList: exactDuplicateList,
-    exactDuplicateOrderNumbers: Array.from(new Set(exactDuplicateList.map(item => item.orderNumber).filter(num => num && String(num).trim() !== '')))
+    exactDuplicateOrderNumbers: Array.from(new Set(exactDuplicateList.map(item => item.orderNumber).filter(num => num && String(num).trim() !== ''))),
+    statusChanged: 0 // 주문상태 변경 감지 추가
   };
 
   console.log('중복 분석 결과:', {

@@ -178,9 +178,17 @@ const processFileWithAPI = async (file: File, password?: string, channel?: strin
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('API 오류 응답:', errorText);
-      throw new Error(`서버 오류 (${response.status}): ${errorText}`);
+      let parsed;
+      try {
+        parsed = await response.json();
+      } catch (_) {
+        const errorText = await response.text();
+        throw new Error(`SERVER_ERROR_RAW:${response.status}:${errorText}`);
+      }
+      if (parsed?.code === 'ENCRYPTED_XLSX_NOT_SUPPORTED') {
+        throw new Error('ENCRYPTED_XLSX_NOT_SUPPORTED');
+      }
+      throw new Error(parsed?.error || `SERVER_ERROR:${response.status}`);
     }
 
     const result = await response.json();
@@ -192,12 +200,18 @@ const processFileWithAPI = async (file: File, password?: string, channel?: strin
     });
 
     if (!result.success) {
+      if (result?.code === 'ENCRYPTED_XLSX_NOT_SUPPORTED') {
+        throw new Error('ENCRYPTED_XLSX_NOT_SUPPORTED');
+      }
       throw new Error(result.error || '파일 처리 중 오류가 발생했습니다.');
     }
 
     return result.data;
   } catch (error) {
     console.error('processFileWithAPI 오류:', error);
+    if (error instanceof Error && error.message === 'ENCRYPTED_XLSX_NOT_SUPPORTED') {
+      throw new Error('ENCRYPTED_XLSX_NOT_SUPPORTED');
+    }
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
       throw new Error('서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.');
     }
@@ -351,7 +365,9 @@ export default function UploadPage() {
       setUploadState(prev => ({ ...prev, isProcessing: false, processingStep: '' }));
       
       if (error instanceof Error) {
-        if (error.message.includes('서버에 연결할 수 없습니다')) {
+        if (error.message === 'ENCRYPTED_XLSX_NOT_SUPPORTED') {
+          toast.error('이 엑셀 파일은 암호화되어 있습니다. 비밀번호를 제거하거나 CSV로 저장 후 업로드해주세요.');
+        } else if (error.message.includes('서버에 연결할 수 없습니다')) {
           toast.error('서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.');
         } else if (error.message.includes('PASSWORD_REQUIRED')) {
           toast.error('이 파일은 비밀번호가 필요합니다. 비밀번호를 입력해주세요.');
@@ -511,13 +527,16 @@ export default function UploadPage() {
       });
 
       // 중복 데이터가 있는 경우 사용자에게 확인
-      if (duplicateCheck.duplicates > 0) {
-        const shouldContinue = confirm(
-          `데이터베이스에서 ${duplicateCheck.duplicates}개의 중복 데이터가 발견되었습니다.\n` +
-          `새로운 데이터: ${duplicateCheck.newItems}개\n` +
-          `중복된 데이터는 기존 데이터를 덮어씁니다.\n` +
+      if (duplicateCheck.duplicates > 0 || duplicateCheck.statusChanged > 0) {
+        const message = [
+          `데이터베이스에서 ${duplicateCheck.duplicates}개의 중복 데이터가 발견되었습니다.`,
+          duplicateCheck.statusChanged > 0 ? `${duplicateCheck.statusChanged}개의 주문상태 변경이 감지되었습니다.` : '',
+          `새로운 데이터: ${duplicateCheck.newItems}개`,
+          `중복된 데이터는 기존 데이터를 덮어쓰고, 주문상태 변경은 업데이트됩니다.`,
           `계속 진행하시겠습니까?`
-        );
+        ].filter(Boolean).join('\n');
+        
+        const shouldContinue = confirm(message);
         
         if (!shouldContinue) {
           setUploadState(prev => ({ ...prev, isProcessing: false, processingStep: '' }));
@@ -676,7 +695,9 @@ export default function UploadPage() {
     } catch (error) {
       console.error('업로드 오류:', error);
       if (error instanceof Error) {
-        if (error.message === 'PASSWORD_REQUIRED') {
+        if (error.message === 'ENCRYPTED_XLSX_NOT_SUPPORTED') {
+          toast.error('이 엑셀 파일은 암호화되어 있습니다. 비밀번호를 제거하거나 CSV로 저장 후 업로드해주세요.');
+        } else if (error.message === 'PASSWORD_REQUIRED') {
           toast.error('이 파일은 비밀번호가 필요합니다. 비밀번호를 입력해주세요.');
         } else if (error.message === 'INVALID_PASSWORD') {
           toast.error('비밀번호가 올바르지 않습니다. 다시 확인해주세요.');

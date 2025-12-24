@@ -149,37 +149,58 @@ export async function POST(request: NextRequest) {
       channel: channel
     });
 
-    // 중복 데이터 계산
+    // 중복 데이터 계산 (주문상태 변경 감지 포함)
     const duplicateSet = new Set();
     const newItems = new Set();
+    const statusChangedItems = new Set();
 
     orderItems.forEach(item => {
       let isDuplicate = false;
+      let statusChanged = false;
+      let existingItem = null;
 
       if (channel === 'smartstore' || channel === 'YTshopping' || channel === 'ytshopping') {
         // 스마트스토어와 유튜브쇼핑: 상품주문번호, 주문번호, 상품명, 옵션명이 모두 같아야 중복
-        isDuplicate = existingOrders?.some(existing => 
+        existingItem = existingOrders?.find(existing => 
           existing.order_number === item.order_number &&
           existing.product_order_number === item.product_order_number &&
           existing.product_name === item.product_name &&
           existing.product_option === item.product_option
         );
+        isDuplicate = !!existingItem;
       } else {
         // 다른 채널들: 주문번호, 상품명, 옵션명이 같아야 중복
-        isDuplicate = existingOrders?.some(existing => 
+        existingItem = existingOrders?.find(existing => 
           existing.order_number === item.order_number &&
           existing.product_name === item.product_name &&
           existing.product_option === item.product_option
         );
+        isDuplicate = !!existingItem;
+      }
+
+      // 주문상태 변경 확인
+      if (isDuplicate && existingItem) {
+        statusChanged = existingItem.status !== item.status;
       }
 
       if (isDuplicate) {
-        if (channel === 'smartstore' || channel === 'YTshopping' || channel === 'ytshopping') {
-          duplicateSet.add(`${item.order_number}-${item.product_order_number}-${item.product_name}-${item.product_option}`);
+        if (statusChanged) {
+          // 주문상태가 변경된 경우
+          if (channel === 'smartstore' || channel === 'YTshopping' || channel === 'ytshopping') {
+            statusChangedItems.add(`${item.order_number}-${item.product_order_number}-${item.product_name}-${item.product_option}`);
+          } else {
+            statusChangedItems.add(`${item.order_number}-${item.product_name}-${item.product_option}`);
+          }
         } else {
-          duplicateSet.add(`${item.order_number}-${item.product_name}-${item.product_option}`);
+          // 완전히 동일한 데이터
+          if (channel === 'smartstore' || channel === 'YTshopping' || channel === 'ytshopping') {
+            duplicateSet.add(`${item.order_number}-${item.product_order_number}-${item.product_name}-${item.product_option}`);
+          } else {
+            duplicateSet.add(`${item.order_number}-${item.product_name}-${item.product_option}`);
+          }
         }
       } else {
+        // 새로운 데이터
         if (channel === 'smartstore' || channel === 'YTshopping' || channel === 'ytshopping') {
           newItems.add(`${item.order_number}-${item.product_order_number}-${item.product_name}-${item.product_option}`);
         } else {
@@ -192,6 +213,7 @@ export async function POST(request: NextRequest) {
       total: orderItems.length,
       duplicates: duplicateSet.size,
       newItems: newItems.size,
+      statusChanged: statusChangedItems.size,
       channel: channel
     });
 
@@ -200,7 +222,8 @@ export async function POST(request: NextRequest) {
       data: {
         total: orderItems.length,
         duplicates: duplicateSet.size,
-        newItems: newItems.size
+        newItems: newItems.size,
+        statusChanged: statusChangedItems.size
       }
     });
 

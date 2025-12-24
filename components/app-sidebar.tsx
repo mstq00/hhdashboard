@@ -16,6 +16,7 @@ import {
   ShoppingBag,
   ChevronRight,
   Upload,
+  Music,
 } from "lucide-react"
 
 import { NavUser } from "@/components/nav-user"
@@ -179,6 +180,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               >
                 <Mic className="size-4" />
                 <span>TTS STUDIO</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            {/* BGM STUDIO - 임시 비활성화 */}
+            <SidebarMenuItem>
+              <SidebarMenuButton 
+                isActive={false}
+                className="cursor-not-allowed opacity-50"
+              >
+                <Music className="size-4" />
+                <span>BGM STUDIO</span>
+                <span className="ml-auto text-xs text-muted-foreground">(비활성화)</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

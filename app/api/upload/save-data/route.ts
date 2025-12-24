@@ -453,8 +453,8 @@ export async function POST(request: NextRequest) {
         console.log(`배치 ${batchNumber} 처리 중: ${batch.length}개 항목`);
         
         const result = await retryOperation(async () => {
-          // 직접 중복 확인 후 INSERT/UPDATE 처리
-          console.log(`배치 ${batchNumber} 중복 확인 중...`);
+          // UPSERT 로직 구현 (INSERT ... ON CONFLICT ... DO UPDATE)
+          console.log(`배치 ${batchNumber} UPSERT 처리 중...`);
           
           // 배치의 모든 키를 추출
           const batchKeys = batch.map(item => ({
@@ -462,10 +462,10 @@ export async function POST(request: NextRequest) {
             data: item
           }));
           
-          // 데이터베이스에서 기존 데이터 확인
+          // 데이터베이스에서 기존 데이터 확인 (주문상태 변경 감지용)
           const { data: existingData, error: existingError } = await supabase
             .from('orders')
-            .select('id, channel, order_number, product_name, product_option, product_order_number')
+            .select('id, channel, order_number, product_name, product_option, product_order_number, status')
             .eq('channel', channel)
             .in('order_number', batch.map(item => item.order_number));
           
@@ -473,7 +473,7 @@ export async function POST(request: NextRequest) {
             throw existingError;
           }
           
-          // 중복 데이터와 새로운 데이터 분리
+          // 중복 데이터와 새로운 데이터 분리 (주문상태 변경 포함)
           const existingKeys = new Set(
             existingData?.map(item => 
               `${item.channel}-${item.order_number}-${item.product_name}-${item.product_option}-${item.product_order_number}`
@@ -485,11 +485,19 @@ export async function POST(request: NextRequest) {
             return !existingKeys.has(key);
           });
           
-          console.log(`배치 ${batchNumber} - 기존: ${existingData?.length || 0}개, 새로운: ${newData.length}개`);
+          const updateData = batch.filter(item => {
+            const key = `${item.channel}-${item.order_number}-${item.product_name}-${item.product_option}-${item.product_order_number}`;
+            return existingKeys.has(key);
+          });
           
-          // 새로운 데이터만 INSERT
+          console.log(`배치 ${batchNumber} - 기존: ${existingData?.length || 0}개, 새로운: ${newData.length}개, 업데이트: ${updateData.length}개`);
+          
+          let insertResult = null;
+          let updateResult = null;
+          
+          // 새로운 데이터 INSERT
           if (newData.length > 0) {
-            const { data: insertResult, error: insertError } = await supabase
+            const { data: insertData, error: insertError } = await supabase
               .from('orders')
               .insert(newData)
               .select('id');
@@ -498,10 +506,65 @@ export async function POST(request: NextRequest) {
               throw insertError;
             }
             
-            return { data: insertResult, error: null };
-          } else {
-            return { data: [], error: null };
+            insertResult = insertData;
+            console.log(`배치 ${batchNumber} - ${newData.length}개 새 데이터 삽입 완료`);
           }
+          
+          // 기존 데이터 UPDATE (주문상태 변경 등)
+          if (updateData.length > 0) {
+            const updatePromises = updateData.map(async (item) => {
+              const { data: updateData, error: updateError } = await supabase
+                .from('orders')
+                .update({
+                  status: item.status,
+                  order_date: item.order_date,
+                  quantity: item.quantity,
+                  total_price: item.total_price,
+                  unit_price: item.unit_price,
+                  customer_name: item.customer_name,
+                  customer_phone: item.customer_phone,
+                  recipient_name: item.recipient_name,
+                  recipient_phone: item.recipient_phone,
+                  recipient_address: item.recipient_address,
+                  recipient_zipcode: item.recipient_zipcode,
+                  tracking_number: item.tracking_number,
+                  courier_company: item.courier_company,
+                  delivery_message: item.delivery_message,
+                  shipping_cost: item.shipping_cost,
+                  assembly_cost: item.assembly_cost,
+                  settlement_amount: item.settlement_amount,
+                  claim_status: item.claim_status,
+                  purchase_confirmation_date: item.purchase_confirmation_date,
+                  shipment_date: item.shipment_date,
+                  payment_completion_date: item.payment_completion_date,
+                  buyer_id: item.buyer_id,
+                  payment_method: item.payment_method,
+                  customs_clearance_code: item.customs_clearance_code,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('channel', item.channel)
+                .eq('order_number', item.order_number)
+                .eq('product_name', item.product_name)
+                .eq('product_option', item.product_option)
+                .eq('product_order_number', item.product_order_number)
+                .select('id');
+              
+              if (updateError) {
+                throw updateError;
+              }
+              
+              return updateData;
+            });
+            
+            const updateResults = await Promise.all(updatePromises);
+            updateResult = updateResults.flat();
+            console.log(`배치 ${batchNumber} - ${updateData.length}개 기존 데이터 업데이트 완료`);
+          }
+          
+          return { 
+            data: [...(insertResult || []), ...(updateResult || [])], 
+            error: null 
+          };
         }, 3, 1000);
 
         if (result.error) {
