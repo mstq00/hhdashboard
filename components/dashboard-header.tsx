@@ -145,7 +145,7 @@ export function DashboardHeader() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator className="my-1 bg-black/5" />
                             <div className="px-2 py-1 text-center">
-                                <span className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest">Version 4.0.1</span>
+                                <span className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest">Version 4.0.2</span>
                             </div>
                         </DropdownMenuContent>
                     </DropdownMenu>
