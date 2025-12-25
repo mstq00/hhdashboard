@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 interface RightPanelContextType {
@@ -16,30 +16,38 @@ const RightPanelContext = createContext<RightPanelContextType | undefined>(undef
 
 export function RightPanelProvider({ children }: { children: ReactNode }) {
     const [content, setContentState] = useState<ReactNode | null>(null);
-    const [contentPath, setContentPath] = useState<string | null>(null); // 컨텐츠가 설정된 당시의 경로
     const [isOpen, setIsOpen] = useState(true);
     const pathname = usePathname();
 
-    // 경로가 변경되었을 때, 이전에 다른 경로에서 설정된 컨텐츠라면 초기화
-    useEffect(() => {
-        if (contentPath && contentPath !== pathname) {
-            setContentState(null);
-            setContentPath(null);
-        }
-    }, [pathname, contentPath]);
+    // Use a ref to track the path associated with the current content.
+    // This avoids race conditions where the 'clear' effect runs after the new page's 'set' effect
+    // but sees the old state value.
+    const contentPathRef = useRef<string | null>(null);
 
     const setContent = useCallback((newContent: ReactNode | null) => {
         setContentState(newContent);
+        // Synchronously update the ref so effects/logic can see the new "claimed" path immediately
         if (newContent) {
-            setContentPath(pathname);
+            contentPathRef.current = pathname;
         } else {
-            setContentPath(null);
+            contentPathRef.current = null;
         }
     }, [pathname]);
 
     const open = useCallback(() => setIsOpen(true), []);
     const close = useCallback(() => setIsOpen(false), []);
     const toggle = useCallback(() => setIsOpen((prev) => !prev), []);
+
+    // Handle path changes
+    useEffect(() => {
+        // If the current path doesn't match the path that 'owns' the content,
+        // it means we navigated to a new page that didn't set any content (yet or at all).
+        // However, if the new page DID set content, setContent would have updated contentPathRef to match pathname.
+        if (contentPathRef.current && contentPathRef.current !== pathname) {
+            setContentState(null);
+            contentPathRef.current = null;
+        }
+    }, [pathname]);
 
     const value = React.useMemo(() => ({
         content,
