@@ -58,7 +58,7 @@ export const GoalTodoCard: React.FC<GoalTodoCardProps> = ({ goal, onCheck, editM
   const progress = total > 0 ? Math.round((done / total) * 100) : (goal.checked ? 100 : 0);
 
   return (
-    <Card className="p-5 mb-2 shadow flex flex-col gap-3 relative">
+    <Card className="p-6 mb-4 border-none shadow-sm shadow-black/5 bg-[var(--pastel-blue-bg)] rounded-[2rem] flex flex-col gap-4 relative transition-all hover:scale-[1.01]">
       {/* 상위 목표 인라인 편집 */}
       {isEditing ? (
         <div className="flex flex-col gap-2">
@@ -97,8 +97,8 @@ export const GoalTodoCard: React.FC<GoalTodoCardProps> = ({ goal, onCheck, editM
       )}
       {/* 진행률 바 */}
       <div className="flex items-center gap-2 ml-6">
-        <Progress value={progress} className="w-40 h-2" />
-        <span className="text-xs text-gray-500 font-semibold ml-2">{progress}% 달성</span>
+        <Progress value={progress} className="h-3 rounded-full bg-white/50 backdrop-blur-sm shadow-inner" />
+        <span className="text-xs text-[var(--pastel-blue-fg)] font-black ml-2">{progress}% 달성</span>
       </div>
       {/* 하위 목표 리스트 */}
       <div className="ml-6 flex flex-col gap-1 mt-2">

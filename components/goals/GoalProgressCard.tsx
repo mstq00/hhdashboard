@@ -28,17 +28,17 @@ export const GoalProgressCard: React.FC<GoalProgressCardProps> = ({ goal }) => {
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 p-4 rounded-3xl bg-[var(--pastel-yellow-bg)] shadow-sm shadow-black/5">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-600">{percent}% 달성</span>
+        <span className="text-[11px] font-black text-[var(--pastel-yellow-fg)] uppercase tracking-widest">{percent}% 달성</span>
       </div>
-      <Progress value={percent} className="h-3" />
-      <div className="flex justify-between text-sm">
-        <span className="text-gray-500">현재: {formatNumber(goal.currentValue || 0, goal.unit || '')}</span>
-        <span className="text-gray-700 font-medium">목표: {formatNumber(goal.targetValue || 0, goal.unit || '')}</span>
+      <Progress value={percent} className="h-3 rounded-full bg-white/50 backdrop-blur-sm shadow-inner" />
+      <div className="flex justify-between text-xs font-bold tracking-tight">
+        <span className="text-slate-500">현재: <span className="text-slate-800">{formatNumber(goal.currentValue || 0, goal.unit || '')}</span></span>
+        <span className="text-slate-500">목표: <span className="text-slate-600">{formatNumber(goal.targetValue || 0, goal.unit || '')}</span></span>
       </div>
     </div>
   );
 };
 
-export default GoalProgressCard; 
+export default GoalProgressCard;

@@ -21,11 +21,11 @@ async function fetchSalesDataFromDBDirectly(startDate: Date, endDate: Date) {
     // 한국시간 기준으로 날짜 범위 조정
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
-    
+
     // Supabase 쿼리용 KST 날짜 문자열 생성 (스토어 매출 분석과 동일하게 +09:00 사용)
     const startDateKST = `${startDateTime.getFullYear()}-${String(startDateTime.getMonth() + 1).padStart(2, '0')}-${String(startDateTime.getDate()).padStart(2, '0')}T00:00:00+09:00`;
     const endDateKST = `${endDateTime.getFullYear()}-${String(endDateTime.getMonth() + 1).padStart(2, '0')}-${String(endDateTime.getDate()).padStart(2, '0')}T23:59:59+09:00`;
-    
+
     // 배치로 모든 데이터 가져오기
     let allData: any[] = [];
     let hasMore = true;
@@ -62,7 +62,7 @@ async function fetchSalesDataFromDBDirectly(startDate: Date, endDate: Date) {
       if (data && data.length > 0) {
         allData = allData.concat(data);
         from += batchSize;
-        
+
         if (data.length < batchSize) {
           hasMore = false;
         }
@@ -70,7 +70,7 @@ async function fetchSalesDataFromDBDirectly(startDate: Date, endDate: Date) {
         hasMore = false;
       }
     }
-    
+
     return allData;
   } catch (error) {
     console.error('DB 데이터 조회 오류:', error);
@@ -82,16 +82,16 @@ async function fetchSalesDataFromDBDirectly(startDate: Date, endDate: Date) {
 function filterValidSalesData(data: any[]) {
   return data.filter(item => {
     // 기본 유효성 검사
-    const isValid = item.order_number && 
-      item.order_date && 
-      item.product_name && 
+    const isValid = item.order_number &&
+      item.order_date &&
+      item.product_name &&
       item.quantity > 0;
-    
+
     if (!isValid) return false;
-    
+
     // 취소/환불/미결제취소 상태인지 확인
     const isCancelledOrder = ['취소', '환불', '미결제취소', '반품', '구매취소', '주문취소'].includes(item.status);
-    
+
     // 취소된 주문은 제외
     return !isCancelledOrder;
   });
@@ -101,43 +101,43 @@ function filterValidSalesData(data: any[]) {
 async function fetchGroupSettlementData(year: number) {
   try {
     const groupSalesDbId = 'e6121c39c37c4d349032829e5b796c2c';
-    
+
     const response = await notionClient.databases.query({
       database_id: groupSalesDbId,
     });
-    
+
     const monthlySettlement: Record<number, number> = {};
-    
+
     // 1~12월 초기화
     for (let month = 1; month <= 12; month++) {
       monthlySettlement[month] = 0;
     }
-    
+
     response.results.forEach((page: any) => {
       const properties = page.properties;
-      
+
       // 일정(date) 속성에서 시작일 가져오기
       const scheduleProperty = findPropertyByType(properties, 'date', '일정', 'Schedule');
       const scheduleDateStr = getDateValue(properties, scheduleProperty);
-      
+
       if (scheduleDateStr) {
         const scheduleDate = new Date(scheduleDateStr);
         const month = scheduleDate.getMonth() + 1;
         const itemYear = scheduleDate.getFullYear();
-        
+
         // 해당 연도의 데이터만 처리
         if (itemYear === year && month >= 1 && month <= 12) {
           // 정산금액 가져오기
           const settlementProperty = findPropertyByType(properties, 'number', '정산금액', 'Settlement Amount');
           const settlementAmount = getNumberValue(properties, settlementProperty);
-          
+
           if (settlementAmount > 0) {
             monthlySettlement[month] += settlementAmount;
           }
         }
       }
     });
-    
+
     return monthlySettlement;
   } catch (error) {
     console.error('공동구매 정산금액 조회 오류:', error);
@@ -149,35 +149,35 @@ async function fetchGroupSettlementData(year: number) {
 async function fetchAdRevenueDetails(year: number, month: number) {
   try {
     const adRevenueDbId = 'd04c779e1ee84e6d9dd062823ebb4ff8';
-    
+
     const response = await notionClient.databases.query({
       database_id: adRevenueDbId,
     });
-    
+
     const adDetails: any[] = [];
-    
+
     response.results.forEach((page: any) => {
       const properties = page.properties;
-      
+
       // 정산입금일자 속성에서 날짜 가져오기
       const depositDateProperty = findPropertyByType(properties, 'date', '정산입금일자', 'Settlement Date');
       const depositDateStr = getDateValue(properties, depositDateProperty);
-      
+
       if (depositDateStr) {
         const depositDate = new Date(depositDateStr);
         const itemMonth = depositDate.getMonth() + 1;
         const itemYear = depositDate.getFullYear();
-        
+
         // 해당 연도와 월의 데이터만 처리
         if (itemYear === year && itemMonth === month) {
           // 이름 가져오기
           const nameProperty = findPropertyByType(properties, 'title', '이름', 'Name');
           const name = getTitleValue(properties, nameProperty);
-          
+
           // 정산금액 가져오기
           const amountProperty = findPropertyByType(properties, 'number', '정산금액', 'Settlement Amount');
           const amount = getNumberValue(properties, amountProperty);
-          
+
           if (amount > 0) {
             adDetails.push({
               name: name || '광고 수익',
@@ -187,7 +187,7 @@ async function fetchAdRevenueDetails(year: number, month: number) {
         }
       }
     });
-    
+
     return adDetails;
   } catch (error) {
     console.error('광고 매출 상세 정보 조회 오류:', error);
@@ -199,39 +199,39 @@ async function fetchAdRevenueDetails(year: number, month: number) {
 async function fetchGroupSalesDetails(year: number, month: number) {
   try {
     const groupSalesDbId = 'e6121c39c37c4d349032829e5b796c2c';
-    
+
     const response = await notionClient.databases.query({
       database_id: groupSalesDbId,
     });
-    
+
     const groupDetails: any[] = [];
-    
+
     response.results.forEach((page: any) => {
       const properties = page.properties;
-      
+
       // 일정(date) 속성에서 시작일 가져오기
       const scheduleProperty = findPropertyByType(properties, 'date', '일정', 'Schedule');
       const scheduleDateStr = getDateValue(properties, scheduleProperty);
-      
+
       if (scheduleDateStr) {
         const scheduleDate = new Date(scheduleDateStr);
         const itemMonth = scheduleDate.getMonth() + 1;
         const itemYear = scheduleDate.getFullYear();
-        
+
         // 해당 연도와 월의 데이터만 처리
         if (itemYear === year && itemMonth === month) {
           // 이름 가져오기
           const nameProperty = findPropertyByType(properties, 'title', '이름', 'Name');
           const name = getTitleValue(properties, nameProperty);
-          
+
           // 매출액 가져오기
           const salesProperty = findPropertyByType(properties, 'number', '매출액', 'Sales Amount');
           const salesAmount = getNumberValue(properties, salesProperty);
-          
+
           // 정산금액 가져오기
           const settlementProperty = findPropertyByType(properties, 'number', '정산금액', 'Settlement Amount');
           const settlementAmount = getNumberValue(properties, settlementProperty);
-          
+
           if (salesAmount > 0) {
             groupDetails.push({
               name: name || '공동구매 매출',
@@ -242,7 +242,7 @@ async function fetchGroupSalesDetails(year: number, month: number) {
         }
       }
     });
-    
+
     return groupDetails;
   } catch (error) {
     console.error('공동구매 매출 상세 정보 조회 오류:', error);
@@ -253,9 +253,9 @@ async function fetchGroupSalesDetails(year: number, month: number) {
 // 속성 타입별로 속성 찾기
 function findPropertyByType(properties: any, type: string, ...possibleNames: string[]): string | null {
   for (const key in properties) {
-    if (properties[key].type === type && 
-        (possibleNames.includes(key) || 
-         possibleNames.some(name => key.toLowerCase().includes(name.toLowerCase())))) {
+    if (properties[key].type === type &&
+      (possibleNames.includes(key) ||
+        possibleNames.some(name => key.toLowerCase().includes(name.toLowerCase())))) {
       return key;
     }
   }
@@ -286,43 +286,43 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const yearParam = searchParams.get('year');
     const monthParam = searchParams.get('month');
-    
+
     const year = yearParam ? parseInt(yearParam) : undefined;
     const month = monthParam ? parseInt(monthParam) : undefined;
-    
+
     // 월 파라미터가 있으면 특정 월의 상세 데이터 가져오기
     if (month && month >= 1 && month <= 12 && year) {
       const detailData = await fetchMonthlySalesData(year, month);
-      
+
       // 해당 월의 공동구매 정산금액과 상세 정보 가져오기
       const groupSettlementData = await fetchGroupSettlementData(year);
       const settlementAmount = groupSettlementData[month] || 0;
-      
+
       // 해당 월의 광고 매출 상세 정보 가져오기
       const adRevenueDetails = await fetchAdRevenueDetails(year, month);
-      
+
       // 해당 월의 공동구매 매출 상세 정보 가져오기
       const groupSalesDetails = await fetchGroupSalesDetails(year, month);
-      
+
       // 해당 월의 스토어 매출 상세 정보 가져오기 (채널별 분리)
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0); // 해당 월의 마지막 날
       const monthSalesData = await fetchSalesDataFromDBDirectly(startDate, endDate);
       const validMonthSalesData = filterValidSalesData(monthSalesData);
-      
+
       // 매핑 서비스 초기화
       const mappingService = new MappingService();
       await mappingService.loadMappingData();
-      
+
       // 채널별 스토어 매출 및 영업이익 계산 (스토어 매출 분석과 동일한 로직)
       const channelData: Record<string, { sales: number, profit: number }> = {};
-      
+
       for (const item of validMonthSalesData) {
         if (!item.order_date) continue;
-        
+
         const { toKoreanTime } = await import('@/lib/utils/dateUtils');
         const orderDate = toKoreanTime(item.order_date);
-        
+
         // 주문일 기준 가격 적용을 위한 날짜 문자열 생성
         const orderDateForPricing = (() => {
           try {
@@ -334,54 +334,54 @@ export async function GET(request: Request) {
             return undefined;
           }
         })();
-        
+
         const mappingInfo = mappingService.getMappedProductInfo(
           item.product_name,
           item.product_option,
           item.channel,
           orderDateForPricing
         );
-        
+
         // 취소/환불/미결제취소 상태인지 확인 (스토어 매출 분석과 동일)
         const isCancelledOrder = ['취소', '환불', '미결제취소', '반품', '구매취소', '주문취소'].includes(item.status);
-        
+
         // 매핑 정보가 있고 유효한 주문인 경우 가격 계산 적용 (스토어 매출 분석과 동일)
         if (mappingInfo && !isCancelledOrder) {
           const quantity = item.quantity || 0;
           const mappedPrice = mappingInfo.price || 0;
           const mappedCost = mappingInfo.cost || 0;
           const commissionRate = mappingInfo.fee || 0;
-          
+
           // 매출액 계산
           const totalSales = mappedPrice * quantity;
-          
+
           // 순이익 계산 (매출액 - 공급가)
           const netProfit = (mappedPrice - mappedCost) * quantity;
-          
+
           // 수수료 금액 계산
           const commissionAmount = totalSales * (commissionRate / 100);
-          
+
           // 영업이익 계산 (순이익 - 수수료)
           const operatingProfit = netProfit - commissionAmount;
-          
+
           // 채널명 정규화
           const channelName = item.channel === 'smartstore' ? '스마트스토어' :
-                             item.channel === 'ohouse' ? '오늘의집' :
-                             item.channel === 'YTshopping' || item.channel === 'ytshopping' ? '유튜브쇼핑' :
-                             item.channel === 'coupang' ? '쿠팡' : item.channel;
-          
+            item.channel === 'ohouse' ? '오늘의집' :
+              item.channel === 'YTshopping' || item.channel === 'ytshopping' ? '유튜브쇼핑' :
+                item.channel === 'coupang' ? '쿠팡' : item.channel;
+
           if (!channelData[channelName]) {
             channelData[channelName] = { sales: 0, profit: 0 };
           }
-          
+
           channelData[channelName].sales += totalSales;
           channelData[channelName].profit += operatingProfit;
         }
       }
-      
+
       // 상세 데이터 생성
       const detailsArray = [];
-      
+
       // 스토어 매출 채널별 추가
       Object.entries(channelData).forEach(([channel, data]) => {
         detailsArray.push({
@@ -391,7 +391,7 @@ export async function GET(request: Request) {
           profit: data.profit
         });
       });
-      
+
       // 광고 매출 추가
       adRevenueDetails.forEach((adItem: any) => {
         detailsArray.push({
@@ -401,7 +401,7 @@ export async function GET(request: Request) {
           profit: adItem.amount
         });
       });
-      
+
       // 공동구매 매출 추가
       groupSalesDetails.forEach((groupItem: any) => {
         detailsArray.push({
@@ -411,7 +411,7 @@ export async function GET(request: Request) {
           profit: groupItem.settlementAmount
         });
       });
-      
+
       return NextResponse.json({
         success: true,
         data: detailData,
@@ -423,22 +423,22 @@ export async function GET(request: Request) {
         month,
       });
     }
-    
+
     // 연간 데이터 준비
     const currentYear = year || new Date().getFullYear();
-    
+
     // 1. DB에서 스토어 판매 데이터 가져오기 (해당 연도 전체)
     const startDate = new Date(currentYear, 0, 1); // 해당 연도 1월 1일
     const endDate = new Date(currentYear, 11, 31); // 해당 연도 12월 31일
     const allSalesData = await fetchSalesDataFromDBDirectly(startDate, endDate);
     const validSalesData = filterValidSalesData(allSalesData);
-    
+
     // 2. 노션에서 공동구매 및 유료광고 데이터 가져오기
     const notionData = await fetchYearlyTotalSalesData(currentYear);
-    
+
     // 3. 공동구매 정산금액 가져오기
     const groupSettlementData = await fetchGroupSettlementData(currentYear);
-    
+
     // 월별 데이터를 저장할 객체 초기화
     const monthlyData: Record<number, {
       id: string,
@@ -459,45 +459,45 @@ export async function GET(request: Request) {
         month,
         year: currentYear,
         storeSales: 0,
-        adRevenue: 0, 
+        adRevenue: 0,
         groupSales: 0,
         totalSales: 0,
         expectedProfit: 0,
         notes: ''
       };
-      
+
       // 노션 데이터에서 공동구매와 유료광고 데이터 가져와서 설정
       const notionMonth = notionData.find((item: any) => item.month === month);
       if (notionMonth) {
         monthlyData[month].adRevenue = notionMonth.adRevenue || 0;
         monthlyData[month].groupSales = notionMonth.groupSales || 0;
         monthlyData[month].notes = notionMonth.notes || '';
-        
+
         // 광고 매출은 그대로 예상이익에 추가
         monthlyData[month].expectedProfit += monthlyData[month].adRevenue;
-        
+
         // 공동구매 정산금액을 예상이익에 추가
         const settlementAmount = groupSettlementData[month] || 0;
         monthlyData[month].expectedProfit += settlementAmount;
       }
     }
-    
+
     // 4. 매핑 서비스 초기화
     const mappingService = new MappingService();
     await mappingService.loadMappingData();
-    
+
     // 5. DB 데이터를 월별로 집계 (스토어 매출 분석과 동일한 로직)
     let processedCount = 0;
-    
+
     for (const item of validSalesData) {
       if (!item.order_date) continue;
-      
+
       // 한국시간 기준으로 주문일시 처리 (스토어 매출 분석과 동일한 로직)
       const { toKoreanTime } = await import('@/lib/utils/dateUtils');
       const orderDate = toKoreanTime(item.order_date);
       const itemYear = orderDate.getFullYear();
       const itemMonth = orderDate.getMonth() + 1; // 0-11 -> 1-12
-      
+
       // 조회 연도에 해당하는 데이터만 처리
       if (itemYear === currentYear && itemMonth >= 1 && itemMonth <= 12) {
         // 매핑 정보 가져오기 (주문일 기준 가격 적용)
@@ -522,26 +522,26 @@ export async function GET(request: Request) {
 
         // 취소/환불/미결제취소 상태인지 확인 (스토어 매출 분석과 동일)
         const isCancelledOrder = ['취소', '환불', '미결제취소', '반품', '구매취소', '주문취소'].includes(item.status);
-        
+
         // 매핑 정보가 있고 유효한 주문인 경우 가격 계산 적용 (스토어 매출 분석과 동일)
         if (mappingInfo && !isCancelledOrder) {
           const quantity = item.quantity || 0;
           const mappedPrice = mappingInfo.price || 0;
           const mappedCost = mappingInfo.cost || 0;
           const commissionRate = mappingInfo.fee || 0;
-          
+
           // 매출액 계산
           const totalSales = mappedPrice * quantity;
-          
+
           // 순이익 계산 (매출액 - 공급가)
           const netProfit = (mappedPrice - mappedCost) * quantity;
-          
+
           // 수수료 금액 계산
           const commissionAmount = totalSales * (commissionRate / 100);
-          
+
           // 영업이익 계산 (순이익 - 수수료)
           const operatingProfit = netProfit - commissionAmount;
-          
+
           // 해당 월의 매출과 예상이익에 추가
           monthlyData[itemMonth].storeSales += totalSales;
           monthlyData[itemMonth].expectedProfit += operatingProfit;
@@ -549,7 +549,7 @@ export async function GET(request: Request) {
         }
       }
     }
-    
+
     // 6. 합계 계산
     const totals = {
       storeSales: 0,
@@ -557,23 +557,89 @@ export async function GET(request: Request) {
       groupSales: 0,
       totalSales: 0,
       expectedProfit: 0,
+      channelTotals: {} as Record<string, number>,
+      storeProfit: 0,
+      adProfit: 0,
+      groupProfit: 0,
     };
-    
+
     // 최종 데이터 배열 생성 및 합계 계산
     const finalMonthlyData = Object.values(monthlyData).map(item => {
       // 각 월의 스토어, 광고, 공동구매 매출 합산하여 총 매출 계산
       item.totalSales = item.storeSales + item.adRevenue + item.groupSales;
-      
+
       // 전체 합계에 추가
       totals.storeSales += item.storeSales;
       totals.adRevenue += item.adRevenue;
       totals.groupSales += item.groupSales;
       totals.totalSales += item.totalSales;
       totals.expectedProfit += item.expectedProfit;
-      
+
+      // 광고 수익 합계 (인사이트 패널용)
+      totals.adProfit += item.adRevenue;
+
+      // 공동구매 정산 합계 (인사이트 패널용)
+      const settlementAmount = groupSettlementData[item.month] || 0;
+      totals.groupProfit += settlementAmount;
+
       return item;
     });
-    
+
+    // 7. 채널별 매출 집계 및 스토어 총 이익 계산
+    // validSalesData를 다시 순회하여 채널별 매출과 스토어 총 이익(영업이익 합계)을 계산합니다.
+    for (const item of validSalesData) {
+      if (!item.order_date) continue;
+
+      const { toKoreanTime } = await import('@/lib/utils/dateUtils');
+      const orderDate = toKoreanTime(item.order_date);
+      const itemYear = orderDate.getFullYear();
+
+      if (itemYear === currentYear) {
+        const orderDateForPricing = (() => {
+          try {
+            const y = orderDate.getFullYear();
+            const m = String(orderDate.getMonth() + 1).padStart(2, '0');
+            const d = String(orderDate.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+          } catch {
+            return undefined;
+          }
+        })();
+
+        const mappingInfo = mappingService.getMappedProductInfo(
+          item.product_name,
+          item.product_option,
+          item.channel,
+          orderDateForPricing
+        );
+
+        const isCancelledOrder = ['취소', '환불', '미결제취소', '반품', '구매취소', '주문취소'].includes(item.status);
+
+        if (mappingInfo && !isCancelledOrder) {
+          const quantity = item.quantity || 0;
+          const mappedPrice = mappingInfo.price || 0;
+          const mappedCost = mappingInfo.cost || 0;
+          const commissionRate = mappingInfo.fee || 0;
+
+          const totalSales = mappedPrice * quantity;
+          const netProfit = (mappedPrice - mappedCost) * quantity;
+          const commissionAmount = totalSales * (commissionRate / 100);
+          const operatingProfit = netProfit - commissionAmount;
+
+          // 스토어 총 이익(영업이익 합계) 누적
+          totals.storeProfit += operatingProfit;
+
+          // 채널명 정규화 및 매출액 누적
+          const channelName = item.channel === 'smartstore' ? '스마트스토어' :
+            item.channel === 'ohouse' ? '오늘의집' :
+              item.channel === 'YTshopping' || item.channel === 'ytshopping' ? '유튜브쇼핑' :
+                item.channel === 'coupang' ? '쿠팡' : item.channel;
+
+          totals.channelTotals[channelName] = (totals.channelTotals[channelName] || 0) + totalSales;
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: finalMonthlyData,

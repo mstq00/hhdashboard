@@ -43,6 +43,7 @@ interface GoalDetailProps {
   onClose: () => void
   onProgressUpdate?: (goalId: string, progress: number) => void
   onStatusUpdate?: (goalId: string, status: string) => void
+  hideHeader?: boolean
 }
 
 const statusColors = {
@@ -61,15 +62,15 @@ const statusText = {
   stopped: '중단'
 }
 
-export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUpdate }: GoalDetailProps) {
+export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUpdate, hideHeader }: GoalDetailProps) {
   // 로컬 목표 상태 (실시간 업데이트를 위해)
   const [localGoal, setLocalGoal] = useState<Goal | null>(null)
-  
+
   // goal prop이 변경될 때 로컬 상태 업데이트
   useEffect(() => {
     setLocalGoal(goal)
   }, [goal])
-  
+
   // 목표별 지표 데이터를 관리하기 위한 상태
   const [goalMetrics, setGoalMetrics] = useState<Record<string, MetricEntry[]>>({
     // 초기 샘플 데이터 (지표가 있는 목표들)
@@ -96,10 +97,10 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
     ]
     // 지표가 없는 목표들 (550e8400-e29b-41d4-a716-446655440108, 550e8400-e29b-41d4-a716-446655440109)은 빈 배열로 처리
   })
-  
+
   // 현재 목표의 지표 데이터
-  const metricEntries = useMemo(() => 
-    localGoal ? (goalMetrics[localGoal.id] || []) : [], 
+  const metricEntries = useMemo(() =>
+    localGoal ? (goalMetrics[localGoal.id] || []) : [],
     [localGoal, goalMetrics]
   )
   const setMetricEntries = (entries: MetricEntry[]) => {
@@ -121,14 +122,14 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
   // 진행률 계산 함수
   const calculateProgress = (entries: MetricEntry[], startValue: number, targetValue: number): number => {
     if (entries.length === 0) return 0
-    
+
     // 가장 최근 지표값 가져오기
     const latestEntry = entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
     const currentValue = parseFloat(latestEntry.value)
-    
+
     // 진행률 계산: (현재값 - 시작값) / (목표값 - 시작값) * 100
     const progress = ((currentValue - startValue) / (targetValue - startValue)) * 100
-    
+
     // 0-100 범위로 제한
     return Math.max(0, Math.min(100, Math.round(progress)))
   }
@@ -141,7 +142,7 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
     }
   }, [metricEntries, localGoal?.hasMetric, localGoal?.startValue, localGoal?.targetValue, localGoal?.id])
 
-  if (!localGoal || !isOpen) return null
+  if (!localGoal) return null
 
   const handleAddMetric = async () => {
     if (!newMetricEntry.date || !newMetricEntry.value) {
@@ -162,7 +163,7 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
       setNewMetricEntry({ date: '', value: '', note: '' })
       setIsAddingMetric(false)
       console.log('지표값 저장 성공:', entry)
-      
+
       // 지표값이 추가된 후 진행률 업데이트
       if (localGoal?.hasMetric && localGoal.startValue !== undefined && localGoal.targetValue !== undefined) {
         const newProgress = calculateProgress([...metricEntries, entry], localGoal.startValue, localGoal.targetValue)
@@ -170,20 +171,6 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
           onProgressUpdate(localGoal.id, newProgress)
         }
       }
-      
-      // TODO: DB 연동 시 아래 코드 활성화
-      // const response = await fetch('/api/goals/metrics', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({
-      //     goalId: goal.id,
-      //     date: entry.date,
-      //     value: parseFloat(entry.value),
-      //     note: entry.note
-      //   })
-      // })
-      // if (!response.ok) throw new Error('지표값 저장 실패')
-      // const result = await response.json()
     } catch (error) {
       console.error('지표값 저장 오류:', error)
       alert('지표값 저장에 실패했습니다.')
@@ -196,7 +183,7 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
       const updatedEntries = metricEntries.filter(entry => entry.id !== id)
       setMetricEntries(updatedEntries)
       console.log('지표값 삭제 성공:', id)
-      
+
       // 지표값이 삭제된 후 진행률 업데이트
       if (localGoal?.hasMetric && localGoal.startValue !== undefined && localGoal.targetValue !== undefined) {
         const newProgress = calculateProgress(updatedEntries, localGoal.startValue, localGoal.targetValue)
@@ -204,19 +191,11 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
           onProgressUpdate(localGoal.id, newProgress)
         }
       }
-      
-      // TODO: DB 연동 시 아래 코드 활성화
-      // const response = await fetch(`/api/goals/metrics/${id}`, {
-      //   method: 'DELETE'
-      // })
-      // if (!response.ok) throw new Error('지표값 삭제 실패')
     } catch (error) {
       console.error('지표값 삭제 오류:', error)
       alert('지표값 삭제에 실패했습니다.')
     }
   }
-
-
 
   const handleStatusChange = (newStatus: string) => {
     try {
@@ -227,23 +206,15 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
           status: newStatus as 'pending' | 'on_track' | 'difficult' | 'completed' | 'stopped'
         })
       }
-      
+
       // 부모 컴포넌트에 상태 변경 알림 (디바운스 적용)
       if (onStatusUpdate && localGoal) {
         setTimeout(() => {
           onStatusUpdate(localGoal.id, newStatus)
         }, 100)
       }
-      
+
       console.log('목표 상태 변경:', { goalId: localGoal?.id, newStatus })
-      
-      // TODO: DB 연동 시 아래 코드 활성화
-      // const response = await fetch(`/api/goals/${goal.id}/status`, {
-      //   method: 'PATCH',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ status: newStatus })
-      // })
-      // if (!response.ok) throw new Error('상태 변경 실패')
     } catch (error) {
       console.error('목표 상태 변경 오류:', error)
     }
@@ -253,34 +224,38 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
   const displayProgress = localGoal.hasMetric ? currentProgress : localGoal.progress
 
   return (
-    <div className="fixed right-0 top-0 h-full w-96 bg-white border-l border-gray-200 shadow-lg overflow-y-auto z-50">
-      <div className="p-6 space-y-6">
+    <div className="h-full flex flex-col">
+      <div className={`${hideHeader ? '' : 'p-1'} space-y-6`}>
         {/* 헤더 */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">목표 상세 정보</h2>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-
-        {/* 목표 제목 */}
-        <div className="space-y-2">
-          <h3 className="text-xl font-bold text-gray-900">{localGoal.title}</h3>
-          <div className="flex items-center gap-2">
-            <Badge className={`${statusColors[localGoal.status]} text-xs font-medium px-3 py-1.5 border rounded-full text-center`}>
-              {statusText[localGoal.status]}
-            </Badge>
-            {localGoal.organization === '키워드' && localGoal.keyword ? (
-              <Badge variant="secondary" className="text-xs font-medium px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-center">
-                {localGoal.keyword}
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-xs font-medium px-3 py-1.5 border-slate-200 text-slate-700 rounded-full text-center bg-white">
-                {localGoal.organization}
-              </Badge>
-            )}
+        {!hideHeader && (
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">목표 상세 정보</h2>
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
+              <X className="w-4 h-4" />
+            </Button>
           </div>
-        </div>
+        )}
+
+        {/* 목표 제목 - 패널 헤더와 중복되므로 인라인 시 제거 고려 가능하나, 여기서는 유지하되 스타일만 조정 */}
+        {!hideHeader && (
+          <div className="space-y-2">
+            <h3 className="text-xl font-bold text-gray-900">{localGoal.title}</h3>
+            <div className="flex items-center gap-2">
+              <Badge className={`${statusColors[localGoal.status]} text-xs font-medium px-3 py-1.5 border rounded-full text-center`}>
+                {statusText[localGoal.status]}
+              </Badge>
+              {localGoal.organization === '키워드' && localGoal.keyword ? (
+                <Badge variant="secondary" className="text-xs font-medium px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-center">
+                  {localGoal.keyword}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs font-medium px-3 py-1.5 border-slate-200 text-slate-700 rounded-full text-center bg-white">
+                  {localGoal.organization}
+                </Badge>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 진행률 */}
         <Card className="border border-gray-200 shadow-sm">
@@ -295,7 +270,7 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
                   <span className="font-medium">{displayProgress}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div 
+                  <div
                     className="bg-blue-600 h-3 rounded-full transition-all duration-300"
                     style={{ width: `${displayProgress}%` }}
                   ></div>
@@ -375,20 +350,20 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
           <CardContent className="space-y-4">
             {localGoal.hasMetric && localGoal.metricName ? (
               <>
-                                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-700">지표명</Label>
-                      <p className="text-sm text-gray-900">{localGoal.metricName}</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-700">시작값</Label>
-                      <p className="text-sm text-gray-900">{localGoal.startValue}</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-700">목표값</Label>
-                      <p className="text-sm text-gray-900">{localGoal.targetValue}</p>
-                    </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-gray-700">지표명</Label>
+                    <p className="text-sm text-gray-900">{localGoal.metricName}</p>
                   </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-gray-700">시작값</Label>
+                    <p className="text-sm text-gray-900">{localGoal.startValue}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-gray-700">목표값</Label>
+                    <p className="text-sm text-gray-900">{localGoal.targetValue}</p>
+                  </div>
+                </div>
 
                 <Separator />
 
@@ -446,13 +421,13 @@ export function GoalDetail({ goal, isOpen, onClose, onProgressUpdate, onStatusUp
                           />
                         </div>
                         <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => { 
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
                               setIsAddingMetric(false)
                               setNewMetricEntry({ date: '', value: '', note: '' })
-                            }} 
+                            }}
                             className="h-8"
                           >
                             취소

@@ -2,10 +2,11 @@
 
 import * as React from "react"
 import { useRouter, usePathname } from "next/navigation"
+import Image from "next/image"
 import {
-  LayoutDashboard, 
-  DollarSign, 
-  Package, 
+  LayoutDashboard,
+  DollarSign,
+  Package,
   Target,
   Video,
   BarChart3,
@@ -17,24 +18,27 @@ import {
   ChevronRight,
   Upload,
   Music,
+  Image as ImageIcon,
+  Link2,
+  Settings,
 } from "lucide-react"
 
 import { NavUser } from "@/components/nav-user"
-import { TeamSwitcher } from "@/components/team-switcher"
+
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
   SidebarRail,
   SidebarGroup,
   SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
   SidebarMenuSub,
   SidebarMenuSubItem,
   SidebarMenuSubButton,
+  SidebarHeader,
+  SidebarFooter,
 } from "@/components/ui/sidebar"
 import {
   Collapsible,
@@ -45,189 +49,146 @@ import {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter()
   const pathname = usePathname()
-  
+
   // 페이지 이동 함수
   const navigateTo = (path: string) => {
     router.push(path)
   }
-  
+
   return (
-    <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <TeamSwitcher />
+    <Sidebar collapsible="icon" className="border-r border-black/5 bg-sidebar" {...props}>
+      {/* 로고 헤더 */}
+      <SidebarHeader className="px-4 py-4">
+        <div className="flex items-center justify-center group-data-[collapsible=icon]:justify-center">
+          <Image
+            src="/hejdoo-logo-new.png"
+            alt="Hejdoo Home"
+            width={120}
+            height={40}
+            className="h-8 w-auto object-contain group-data-[collapsible=icon]:h-6 brightness-0 invert opacity-90"
+          />
+        </div>
       </SidebarHeader>
-      <SidebarContent>
+
+      <SidebarContent className="px-3 py-2">
         {/* 운영 유틸리티 */}
         <SidebarGroup>
-          <SidebarGroupLabel>운영 유틸리티</SidebarGroupLabel>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton 
-                isActive={pathname === "/analytics"} 
-                onClick={() => navigateTo("/analytics")}
-              >
-                <LayoutDashboard className="size-4" />
-                <span>스토어 매출 분석</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton 
-                isActive={pathname === "/sales"} 
-                onClick={() => navigateTo("/sales")}
-              >
-                <DollarSign className="size-4" />
-                <span>통합 매출</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton 
-                isActive={pathname === "/products"} 
-                onClick={() => navigateTo("/products")}
-              >
-                <Package className="size-4" />
-                <span>상품 매핑 관리</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton 
-                isActive={pathname === "/upload"} 
-                onClick={() => navigateTo("/upload")}
-              >
-                <Upload className="size-4" />
-                <span>데이터 업로드</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            {/* 목표 관리 */}
-            <SidebarMenuItem>
-              <SidebarMenuButton 
-                isActive={pathname === "/goals"} 
-                onClick={() => navigateTo("/goals")}
-              >
-                <Target className="size-4" />
-                <span>목표 관리</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+          <SidebarGroupLabel className="px-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">운영 유틸리티</SidebarGroupLabel>
+          <SidebarMenu className="gap-1 mt-2">
+            {[
+              { path: "/analytics", name: "스토어 매출 분석", icon: LayoutDashboard },
+              { path: "/sales", name: "통합 매출", icon: DollarSign },
+              { path: "/products", name: "상품 매핑 관리", icon: Package },
+              { path: "/upload", name: "데이터 업로드", icon: Upload },
+              { path: "/goals", name: "목표 관리", icon: Target },
+            ].map((item) => (
+              <SidebarMenuItem key={item.path}>
+                <SidebarMenuButton
+                  isActive={pathname === item.path}
+                  onClick={() => navigateTo(item.path)}
+                  tooltip={item.name}
+                  className={`smooth-transition rounded-2xl h-11 px-4 ${pathname === item.path
+                    ? "bg-[var(--pastel-blue-bg)] text-[var(--pastel-blue-fg)] font-bold"
+                    : "hover:bg-black/5 text-sidebar-foreground hover:text-foreground font-medium"
+                    }`}
+                >
+                  <item.icon className={`size-5 transition-transform duration-300 ${pathname === item.path ? 'scale-110' : 'opacity-70'}`} />
+                  <span className="ml-2">{item.name}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
           </SidebarMenu>
         </SidebarGroup>
 
         {/* 콘텐츠 유틸리티 */}
-        <SidebarGroup>
-          <SidebarGroupLabel>콘텐츠 유틸리티</SidebarGroupLabel>
-          <SidebarMenu>
-            {/* 숏폼 분석 */}
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="px-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">콘텐츠 유틸리티</SidebarGroupLabel>
+          <SidebarMenu className="gap-1 mt-2">
             <SidebarMenuItem>
-              <SidebarMenuButton>
-                <Video className="size-4" />
-                <span>숏폼 분석</span>
-              </SidebarMenuButton>
-              <SidebarMenuSub>
-                <SidebarMenuSubItem>
-                  <SidebarMenuSubButton 
-                    isActive={pathname === "/shortform/analyze"} 
-                    onClick={() => navigateTo("/shortform/analyze")}
-                  >
-                    <BarChart3 className="size-4" />
-                    <span>분석하기</span>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-                <SidebarMenuSubItem>
-                  <SidebarMenuSubButton 
-                    isActive={pathname === "/shortform/results"} 
-                    onClick={() => navigateTo("/shortform/results")}
-                  >
-                    <FileText className="size-4" />
-                    <span>분석결과</span>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              </SidebarMenuSub>
-            </SidebarMenuItem>
-
-            {/* 숏폼 기획 */}
-            <SidebarMenuItem>
-              <SidebarMenuButton>
-                <PenTool className="size-4" />
-                <span>숏폼 기획</span>
-              </SidebarMenuButton>
-              <SidebarMenuSub>
-                <SidebarMenuSubItem>
-                  <SidebarMenuSubButton 
-                    isActive={false}
-                    className="cursor-not-allowed opacity-50"
-                  >
-                    <PenTool className="size-4" />
-                    <span>기획하기</span>
-                    <span className="ml-auto text-xs text-muted-foreground">(준비중)</span>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-                <SidebarMenuSubItem>
-                  <SidebarMenuSubButton 
-                    isActive={false}
-                    className="cursor-not-allowed opacity-50"
-                  >
-                    <FileText className="size-4" />
-                    <span>기획결과</span>
-                    <span className="ml-auto text-xs text-muted-foreground">(준비중)</span>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              </SidebarMenuSub>
-            </SidebarMenuItem>
-
-            {/* TTS STUDIO */}
-            <SidebarMenuItem>
-              <SidebarMenuButton 
-                isActive={pathname === "/tts"} 
-                onClick={() => navigateTo("/tts")}
+              <SidebarMenuButton
+                isActive={pathname.startsWith("/shortform")}
+                onClick={() => navigateTo("/shortform")}
+                tooltip="숏폼 분석"
+                className={`smooth-transition rounded-2xl h-11 px-4 ${pathname.startsWith("/shortform")
+                  ? "bg-[var(--pastel-blue-bg)] text-[var(--pastel-blue-fg)] font-bold"
+                  : "hover:bg-black/5 text-sidebar-foreground hover:text-foreground font-medium"
+                  }`}
               >
-                <Mic className="size-4" />
-                <span>TTS STUDIO</span>
+                <Video className={`size-5 transition-transform duration-300 ${pathname.startsWith("/shortform") ? 'scale-110' : 'opacity-70 opacity-100'}`} />
+                <span className="ml-2 font-medium">숏폼 분석</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
 
-            {/* BGM STUDIO - 임시 비활성화 */}
-            <SidebarMenuItem>
-              <SidebarMenuButton 
-                isActive={false}
-                className="cursor-not-allowed opacity-50"
-              >
-                <Music className="size-4" />
-                <span>BGM STUDIO</span>
-                <span className="ml-auto text-xs text-muted-foreground">(비활성화)</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            {[
+              { path: "/tts", name: "TTS STUDIO", icon: Mic },
+              { path: "/suno", name: "SUNO 프롬프트", icon: Music },
+              { path: "/thumbnail", name: "썸네일 생성기", icon: ImageIcon },
+            ].map((item) => (
+              <SidebarMenuItem key={item.path}>
+                <SidebarMenuButton
+                  isActive={pathname === item.path}
+                  onClick={() => navigateTo(item.path)}
+                  tooltip={item.name}
+                  className={`smooth-transition rounded-2xl h-11 px-4 ${pathname === item.path
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 font-bold"
+                    : "hover:bg-black/5 text-sidebar-foreground hover:text-foreground font-medium"
+                    }`}
+                >
+                  <item.icon className={`size-5 transition-transform duration-300 ${pathname === item.path ? 'scale-110' : 'opacity-70 opacity-100'}`} />
+                  <span className="ml-2 font-medium">{item.name}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
           </SidebarMenu>
         </SidebarGroup>
 
         {/* 상품 유틸리티 */}
-        <SidebarGroup>
-          <SidebarGroupLabel>상품 유틸리티</SidebarGroupLabel>
-          <SidebarMenu>
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="px-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">상품 유틸리티</SidebarGroupLabel>
+          <SidebarMenu className="gap-1 mt-2">
             <SidebarMenuItem>
-              <SidebarMenuButton 
-                isActive={pathname === "/dashboard/product/detail-planning"}
-                className="cursor-not-allowed opacity-50"
+              <SidebarMenuButton
+                isActive={pathname === "/lineart"}
+                onClick={() => navigateTo("/lineart")}
+                tooltip="라인아트 스튜디오"
+                className={`smooth-transition rounded-2xl h-11 px-4 ${pathname === "/lineart"
+                  ? "bg-[var(--pastel-blue-bg)] text-[var(--pastel-blue-fg)] font-bold"
+                  : "hover:bg-black/5 text-sidebar-foreground hover:text-foreground font-medium"
+                  }`}
               >
-                <FileText className="size-4" />
-                <span>상세페이지 기획</span>
-                <span className="ml-auto text-xs text-muted-foreground">(준비중)</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton 
-                isActive={pathname === "/dashboard/product/search"}
-                className="cursor-not-allowed opacity-50"
-              >
-                <Search className="size-4" />
-                <span>상품 서칭</span>
-                <span className="ml-auto text-xs text-muted-foreground">(준비중)</span>
+                <PenTool className={`size-5 transition-transform duration-300 ${pathname === "/lineart" ? 'scale-110' : 'opacity-70 opacity-100'}`} />
+                <span className="ml-2 font-medium">라인아트 스튜디오</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
+
+        {/* 기타 유틸리티 */}
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="px-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">기타 유틸리티</SidebarGroupLabel>
+          <SidebarMenu className="gap-1 mt-2">
+            {[
+              { path: "/url-shortener", name: "URL 단축기", icon: Link2 },
+              { path: "/pdf-to-jpg", name: "PDF to JPG", icon: FileText },
+            ].map((item) => (
+              <SidebarMenuItem key={item.path}>
+                <SidebarMenuButton
+                  isActive={pathname === item.path}
+                  onClick={() => navigateTo(item.path)}
+                  tooltip={item.name}
+                  className={`smooth-transition rounded-2xl h-11 px-4 ${pathname === item.path
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 font-bold"
+                    : "hover:bg-black/5 text-sidebar-foreground hover:text-foreground font-medium"
+                    }`}
+                >
+                  <item.icon className={`size-5 transition-transform duration-300 ${pathname === item.path ? 'scale-110' : 'opacity-70 opacity-100'}`} />
+                  <span className="ml-2 font-medium">{item.name}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <NavUser />
-      </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   )
 }

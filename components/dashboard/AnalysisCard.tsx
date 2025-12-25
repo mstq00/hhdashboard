@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { AlertTriangle, CheckCircle2, Megaphone, MessageCircle, Target, Users, TrendingUp, Lightbulb, BarChart3 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Megaphone, MessageCircle, Target, Users, TrendingUp, Lightbulb, BarChart3, Sparkles } from "lucide-react";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
 import React, { useState } from "react";
 import {
@@ -35,30 +35,32 @@ export function AnalysisCard(card: any) {
   // 카드 타입별 분기
   if (card.type === "checklist") {
     return (
-      <Card className="p-4 flex flex-col gap-2">
-        <div className="font-semibold mb-2">{card.title}</div>
-        <ul className="space-y-1 text-sm">
+      <Card className="p-6 flex flex-col gap-2 rounded-3xl border-none shadow-sm shadow-black/5 bg-white">
+        <div className="font-bold mb-4 text-lg text-slate-800 tracking-tight">{card.title}</div>
+        <ul className="space-y-2 text-sm">
           {(card.items || []).map((item: any, i: number) => {
             const itemText = typeof item === 'object' ? (item.text || item.label || JSON.stringify(item)) : String(item);
             // 바이럴 요소 키워드로 구분
             const isViralItem = itemText.includes("바이럴") || itemText.includes("화제") || itemText.includes("공유") || itemText.includes("트렌드") || itemText.includes("밈") || itemText.includes("유행");
-            
+
             return (
-              <li key={i} className="flex items-center gap-2">
-                {isViralItem ? (
-                  item.checked ? (
-                    <Megaphone className="text-red-500 w-4 h-4" />
+              <li key={i} className={`flex items-start gap-3 p-3 rounded-2xl ${item.checked ? 'bg-white shadow-sm' : 'bg-transparent'}`}>
+                <div className="mt-0.5 shrink-0">
+                  {isViralItem ? (
+                    item.checked ? (
+                      <Megaphone className="text-[var(--pastel-pink-foreground)] w-4 h-4" />
+                    ) : (
+                      <MessageCircle className="text-slate-300 w-4 h-4" />
+                    )
                   ) : (
-                    <MessageCircle className="text-gray-400 w-4 h-4" />
-                  )
-                ) : (
-                  item.checked ? (
-                    <CheckCircle2 className="text-green-500 w-4 h-4" />
-                  ) : (
-                    <AlertTriangle className="text-yellow-500 w-4 h-4" />
-                  )
-                )}
-                <span>{itemText}</span>
+                    item.checked ? (
+                      <CheckCircle2 className="text-[var(--pastel-green-foreground)] w-4 h-4" />
+                    ) : (
+                      <AlertTriangle className="text-[var(--pastel-yellow-foreground)] w-4 h-4" />
+                    )
+                  )}
+                </div>
+                <span className={`leading-relaxed ${item.checked ? 'text-slate-700 font-bold' : 'text-slate-400 font-medium'}`}>{itemText}</span>
               </li>
             );
           })}
@@ -69,30 +71,45 @@ export function AnalysisCard(card: any) {
   if (card.type === "line") {
     const labels = Array.isArray(card.labels) && card.labels.length > 0 ? card.labels : ["시작", "중간", "끝"];
     const data = Array.isArray(card.data) && card.data.length > 0 ? card.data : [100, 80, 60];
-    
+
     return (
-      <Card className="p-4 flex flex-col gap-2">
-        <div className="font-semibold mb-2">{card.title}</div>
-        <Line
-          data={{
-            labels: labels,
-            datasets: [
-              {
-                label: card.title,
-                data: data,
-                borderColor: "#3b82f6",
-                backgroundColor: "rgba(59,130,246,0.2)",
-                tension: 0.4,
-                fill: true,
+      <Card className="p-6 flex flex-col gap-2 rounded-3xl border-none shadow-sm shadow-black/5 bg-white">
+        <div className="font-bold mb-4 text-lg text-slate-800 tracking-tight">{card.title}</div>
+        <div className="p-2">
+          <Line
+            data={{
+              labels: labels,
+              datasets: [
+                {
+                  label: card.title,
+                  data: data,
+                  borderColor: 'var(--chart-1)',
+                  backgroundColor: 'rgba(144, 202, 249, 0.2)',
+                  tension: 0.4,
+                  fill: true,
+                  pointRadius: 4,
+                  pointBackgroundColor: "#fff",
+                  pointBorderWidth: 2,
+                },
+              ],
+            }}
+            options={{
+              responsive: true,
+              plugins: { legend: { display: false } },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  grid: { color: 'rgba(0,0,0,0.05)' },
+                  ticks: { color: '#64748B' }
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: { color: '#64748B' }
+                }
               },
-            ],
-          }}
-          options={{
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true } },
-          }}
-        />
+            }}
+          />
+        </div>
         {card.highlight && (
           <div className="text-xs text-muted-foreground mt-2">{card.highlight.label}: <span className="font-bold text-primary">{card.highlight.value}</span></div>
         )}
@@ -102,7 +119,7 @@ export function AnalysisCard(card: any) {
   if (card.type === "bar") {
     const labels = Array.isArray(card.labels) && card.labels.length > 0 ? card.labels : ["항목1", "항목2", "항목3"];
     const data = Array.isArray(card.data) && card.data.length > 0 ? card.data : [30, 50, 20];
-    
+
     return (
       <Card className="p-4 flex flex-col gap-2">
         <div className="font-semibold mb-2">{card.title}</div>
@@ -113,7 +130,7 @@ export function AnalysisCard(card: any) {
               {
                 label: card.title,
                 data: data,
-                backgroundColor: card.colors || "#22c55e",
+                backgroundColor: card.colors || 'var(--chart-1)',
               },
             ],
           }}
@@ -128,29 +145,38 @@ export function AnalysisCard(card: any) {
   }
   if (card.type === "doughnut") {
     return (
-      <Card className="p-4 flex flex-col gap-2">
-        <div className="font-semibold mb-2">{card.title}</div>
-        <Doughnut
-          data={{
-            labels: card.labels || [],
-            datasets: [
-              {
-                data: card.data || [],
-                backgroundColor: card.colors || ["#facc15", "#3b82f6", "#f472b6", "#22c55e"],
-              },
-            ],
-          }}
-          options={{
-            responsive: true,
-            plugins: { legend: { display: true, position: "bottom" } },
-          }}
-        />
+      <Card className="p-6 flex flex-col gap-2 rounded-3xl border-none shadow-sm shadow-black/5 bg-white">
+        <div className="font-bold mb-4 text-lg text-slate-800 tracking-tight">{card.title}</div>
+        <div className="p-4 max-w-[280px] mx-auto">
+          <Doughnut
+            data={{
+              labels: card.labels || [],
+              datasets: [
+                {
+                  data: card.data || [],
+                  backgroundColor: [
+                    'var(--chart-1)',
+                    'var(--chart-2)',
+                    'var(--chart-3)',
+                    'var(--chart-4)',
+                    'var(--chart-5)',
+                  ],
+                  borderWidth: 0,
+                  hoverOffset: 4,
+                },
+              ],
+            }}
+            options={{
+              plugins: { legend: { display: true, position: "bottom" } },
+            }}
+          />
+        </div>
       </Card>
     );
   }
   if (card.type === "gauge") {
     const value = typeof card.value === 'number' ? card.value : (Number(card.value) || 50);
-    
+
     // 게이지는 바 차트로 대체(간단 구현)
     return (
       <Card className="p-4 flex flex-col gap-2">
@@ -161,7 +187,7 @@ export function AnalysisCard(card: any) {
             datasets: [
               {
                 data: [value],
-                backgroundColor: value > 70 ? "#ef4444" : value > 40 ? "#facc15" : "#22c55e",
+                backgroundColor: value > 70 ? 'var(--pastel-trend-down-fg)' : value > 40 ? 'var(--pastel-yellow-fg)' : 'var(--pastel-trend-up-fg)',
               },
             ],
           }}
@@ -185,7 +211,7 @@ export function AnalysisCard(card: any) {
           </div>
         )}
         {card.warning && (
-          <div className="flex items-center gap-1 text-xs text-yellow-600 mt-2">
+          <div className="flex items-center gap-1 text-xs text-[var(--pastel-yellow-fg)] mt-2">
             <AlertTriangle className="w-4 h-4" /> {card.warning}
           </div>
         )}
@@ -208,8 +234,8 @@ export function AnalysisCard(card: any) {
     return (
       <Card className="p-4 flex flex-col gap-2 items-center justify-center">
         <div className="font-semibold mb-2">{card.title}</div>
-        <div className="text-4xl font-bold text-primary">{card.value}</div>
-        <div className="text-xs text-muted-foreground mt-1">{card.desc}</div>
+        <div className="text-4xl font-black text-[var(--pastel-blue-fg)]">{card.value}</div>
+        <div className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-wider">{card.desc}</div>
       </Card>
     );
   }
@@ -219,34 +245,36 @@ export function AnalysisCard(card: any) {
     const genderData = Array.isArray(card.genderData) && card.genderData.length > 0 ? card.genderData.map((x: number | string) => (isNaN(Number(x)) ? 0 : Number(x))) : [94.2, 5.8, 0];
     const ageLabels = Array.isArray(card.ageLabels) && card.ageLabels.length > 0 ? card.ageLabels : ["만 13-17세", "만 18-24세", "만 25-34세", "만 35-44세", "만 45-54세", "만 55-64세", "만 65세 이상"];
     const ageData = Array.isArray(card.ageData) && card.ageData.length > 0 ? card.ageData.map((x: number | string) => (isNaN(Number(x)) ? 0 : Number(x))) : [0, 0.3, 13.9, 24.2, 42.2, 18.5, 0.9];
-    
+
     // 통합 데이터 구성 (성별 + 연령대)
     const allLabels = [...genderLabels, ...ageLabels];
     const allData = [...genderData, ...ageData];
     const maxValue = Math.max(...allData);
-    
+
     return (
-      <Card className="p-4 flex flex-col gap-4">
-        <div className="font-semibold mb-2">{card.title}</div>
-        <div className="text-xs text-muted-foreground mb-2">조회수 · 업로드 이후(전체 기간)</div>
-        
+      <Card className="p-6 flex flex-col gap-4 rounded-3xl border-none shadow-sm shadow-black/5 bg-[var(--pastel-blue-bg)]">
+        <div className="font-bold mb-1 text-lg text-slate-800 tracking-tight">{card.title}</div>
+        <div className="text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-widest">조회수 · 업로드 이후(전체 기간)</div>
+
         {/* 통합 바 차트 형태로 표시 */}
-        <div className="space-y-2">
+        <div className="space-y-3">
           {allLabels.map((label, index) => {
             const value = allData[index] || 0;
             const width = maxValue > 0 ? (value / maxValue) * 100 : 0;
             const isGender = index < genderLabels.length;
-            
+
             return (
-              <div key={index} className="flex items-center justify-between">
-                <div className="text-xs font-medium w-20 text-left">{label}</div>
-                <div className="flex-1 mx-3 bg-gray-200 rounded-full h-2 relative">
-                  <div 
-                    className={`h-2 rounded-full ${isGender ? 'bg-purple-500' : 'bg-blue-400'}`}
+              <div key={index} className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold px-1">
+                  <span className="text-slate-600">{label}</span>
+                  <span className="text-slate-900">{value}%</span>
+                </div>
+                <div className="flex-1 bg-white/50 backdrop-blur-sm rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ${isGender ? 'bg-[var(--chart-4)]' : 'bg-[var(--chart-1)]'}`}
                     style={{ width: `${width}%` }}
                   />
                 </div>
-                <div className="text-xs font-medium w-12 text-right">{value}%</div>
               </div>
             );
           })}
@@ -379,7 +407,7 @@ export function AnalysisCard(card: any) {
   }
   if (card.type === "summary") {
     const summaryText = card.summary || card.text || card.description || '';
-    
+
     // 텍스트를 섹션별로 파싱
     const parseSummaryText = (text: string) => {
       const sections = [
@@ -389,13 +417,13 @@ export function AnalysisCard(card: any) {
         { key: '주요 개선점', icon: Lightbulb, color: 'text-orange-600', bgColor: 'bg-orange-50' },
         { key: '시장 포지셔닝', icon: BarChart3, color: 'text-indigo-600', bgColor: 'bg-indigo-50' }
       ];
-      
+
       const parsedSections = [];
-      
+
       for (const section of sections) {
         const regex = new RegExp(`\\*\\*${section.key}\\*\\*:?\\s*([^*]+?)(?=\\*\\*|$)`, 'i');
         const match = text.match(regex);
-        
+
         if (match && match[1]) {
           parsedSections.push({
             ...section,
@@ -403,12 +431,12 @@ export function AnalysisCard(card: any) {
           });
         }
       }
-      
+
       return parsedSections;
     };
-    
+
     const sections = parseSummaryText(summaryText);
-    
+
     // 섹션이 파싱되지 않은 경우 원본 텍스트 표시
     if (sections.length === 0) {
       return (
@@ -420,34 +448,57 @@ export function AnalysisCard(card: any) {
         </Card>
       );
     }
-    
+
     return (
-      <Card className="p-6">
-        <div className="font-semibold mb-6 text-lg">{card.title}</div>
-        <div className="space-y-4">
-          {sections.map((section, index) => {
-            const IconComponent = section.icon;
-            return (
-              <div key={index} className={`p-4 rounded-lg ${section.bgColor} border-l-4 border-l-current ${section.color}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <IconComponent className={`w-5 h-5 ${section.color}`} />
-                  <h3 className={`font-semibold ${section.color}`}>{section.key}</h3>
+      <Card className="p-8 rounded-[2rem] border-none shadow-sm shadow-black/5 bg-[var(--pastel-blue-bg)] relative overflow-hidden">
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="p-3 rounded-2xl bg-white shadow-sm">
+              <Sparkles className="w-6 h-6 text-[var(--pastel-blue-fg)]" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-slate-800 tracking-tight">AI 상세 분석 리포트</h2>
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Strategic Video Performance Insights</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {sections.map((section, index) => {
+              const IconComponent = section.icon;
+              const pastelBg = section.key.includes('강점') ? 'bg-[var(--pastel-green-bg)]' :
+                section.key.includes('타겟') ? 'bg-[var(--pastel-purple-bg)]' :
+                  section.key.includes('성과') ? 'bg-[var(--pastel-yellow-bg)]' :
+                    section.key.includes('개선') ? 'bg-[var(--pastel-pink-bg)]' : 'bg-[var(--pastel-blue-bg)]';
+
+              const pastelColor = section.key.includes('강점') ? 'text-[var(--pastel-green-fg)]' :
+                section.key.includes('타겟') ? 'text-[var(--pastel-purple-fg)]' :
+                  section.key.includes('성과') ? 'text-[var(--pastel-yellow-fg)]' :
+                    section.key.includes('개선') ? 'text-[var(--pastel-pink-fg)]' : 'text-[var(--pastel-blue-fg)]';
+
+              return (
+                <div key={index} className={`p-6 rounded-[1.75rem] ${pastelBg} transition-all hover:scale-[1.02] duration-300 group`}>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2.5 rounded-2xl bg-white shadow-sm group-hover:shadow-md transition-all">
+                      <IconComponent className={`w-5 h-5 ${pastelColor}`} />
+                    </div>
+                    <h3 className={`font-black text-sm tracking-tight ${pastelColor} uppercase`}>{section.key}</h3>
+                  </div>
+                  <p className="text-[13px] text-slate-700 leading-relaxed font-medium">
+                    {section.content}
+                  </p>
                 </div>
-                <p className="text-sm text-gray-700 leading-relaxed">
-                  {section.content}
-                </p>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </Card>
     );
   }
+
   // 기본: 텍스트 카드
   return (
-    <Card className="p-4 flex flex-col gap-2">
+    <Card className="p-4 flex flex-col gap-2 rounded-2xl bg-white border-none shadow-sm">
       <div className="font-semibold mb-2">{card.title}</div>
       <div className="text-sm text-muted-foreground">{card.text}</div>
     </Card>
   );
-} 
+}
