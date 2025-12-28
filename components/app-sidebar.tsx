@@ -4,6 +4,7 @@ import * as React from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Image from "next/image"
 import {
+  Home,
   LayoutDashboard,
   DollarSign,
   Package,
@@ -21,6 +22,8 @@ import {
   Image as ImageIcon,
   Link2,
   Settings,
+  Sparkles,
+  History,
 } from "lucide-react"
 
 import { NavUser } from "@/components/nav-user"
@@ -58,7 +61,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" className="border-r border-black/5 bg-sidebar" {...props}>
       {/* 로고 헤더 */}
-      <SidebarHeader className="px-4 py-4">
+      <SidebarHeader className="px-4 py-6">
         <div className="flex items-center justify-center group-data-[collapsible=icon]:justify-center">
           <Image
             src="/hejdoo-logo-new.png"
@@ -70,12 +73,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-3 py-2">
+      <SidebarContent className="px-3 py-2 overflow-y-auto custom-scrollbar">
         {/* 운영 유틸리티 */}
         <SidebarGroup>
-          <SidebarGroupLabel className="px-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">운영 유틸리티</SidebarGroupLabel>
-          <SidebarMenu className="gap-1 mt-2">
+          <SidebarGroupLabel className="px-2 text-[10px] font-bold text-muted-foreground/30 uppercase tracking-[0.2em]">운영 유틸리티</SidebarGroupLabel>
+          <SidebarMenu className="gap-0.5 mt-2">
             {[
+              { path: "/home", name: "홈", icon: Home },
               { path: "/analytics", name: "스토어 매출 분석", icon: LayoutDashboard },
               { path: "/sales", name: "통합 매출", icon: DollarSign },
               { path: "/products", name: "상품 매핑 관리", icon: Package },
@@ -87,13 +91,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   isActive={pathname === item.path}
                   onClick={() => navigateTo(item.path)}
                   tooltip={item.name}
-                  className={`smooth-transition rounded-2xl h-11 px-4 ${pathname === item.path
-                    ? "bg-[var(--pastel-blue-bg)] text-[var(--pastel-blue-fg)] font-bold"
-                    : "hover:bg-black/5 text-sidebar-foreground hover:text-foreground font-medium"
+                  className={`smooth-transition rounded-xl h-10 px-4 ${pathname === item.path
+                    ? "bg-white/10 text-white font-bold backdrop-blur-md"
+                    : "hover:bg-white/5 text-sidebar-foreground hover:text-white font-medium"
                     }`}
                 >
-                  <item.icon className={`size-5 transition-transform duration-300 ${pathname === item.path ? 'scale-110' : 'opacity-70'}`} />
-                  <span className="ml-2">{item.name}</span>
+                  <item.icon className={`size-4.5 transition-transform duration-300 ${pathname === item.path ? 'scale-110 opacity-100' : 'opacity-50'}`} />
+                  <span className="ml-2 text-sm">{item.name}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
@@ -102,20 +106,35 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
         {/* 콘텐츠 유틸리티 */}
         <SidebarGroup className="mt-4">
-          <SidebarGroupLabel className="px-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">콘텐츠 유틸리티</SidebarGroupLabel>
-          <SidebarMenu className="gap-1 mt-2">
+          <SidebarGroupLabel className="px-2 text-[10px] font-bold text-muted-foreground/30 uppercase tracking-[0.2em]">콘텐츠 유틸리티</SidebarGroupLabel>
+          <SidebarMenu className="gap-0.5 mt-2">
             <SidebarMenuItem>
               <SidebarMenuButton
-                isActive={pathname.startsWith("/shortform")}
+                isActive={pathname.startsWith("/shortform") && !pathname.includes("/osmu")}
                 onClick={() => navigateTo("/shortform")}
                 tooltip="숏폼 분석"
-                className={`smooth-transition rounded-2xl h-11 px-4 ${pathname.startsWith("/shortform")
-                  ? "bg-[var(--pastel-blue-bg)] text-[var(--pastel-blue-fg)] font-bold"
-                  : "hover:bg-black/5 text-sidebar-foreground hover:text-foreground font-medium"
+                className={`smooth-transition rounded-xl h-10 px-4 ${pathname.startsWith("/shortform") && !pathname.includes("/osmu")
+                  ? "bg-white/10 text-white font-bold backdrop-blur-md"
+                  : "hover:bg-white/5 text-sidebar-foreground hover:text-white font-medium"
                   }`}
               >
-                <Video className={`size-5 transition-transform duration-300 ${pathname.startsWith("/shortform") ? 'scale-110' : 'opacity-70 opacity-100'}`} />
-                <span className="ml-2 font-medium">숏폼 분석</span>
+                <Video className={`size-4.5 transition-transform duration-300 ${pathname.startsWith("/shortform") && !pathname.includes("/osmu") ? 'scale-110 opacity-100' : 'opacity-50'}`} />
+                <span className="ml-2 text-sm">숏폼 분석</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/osmu"}
+                onClick={() => navigateTo("/osmu")}
+                tooltip="OSMU 스튜디오"
+                className={`smooth-transition rounded-xl h-10 px-4 ${pathname === "/osmu"
+                  ? "bg-white/10 text-white font-bold backdrop-blur-md"
+                  : "hover:bg-white/5 text-sidebar-foreground hover:text-white font-medium"
+                  }`}
+              >
+                <Sparkles className={`size-4.5 transition-transform duration-300 ${pathname === "/osmu" ? 'scale-110 opacity-100' : 'opacity-50'}`} />
+                <span className="ml-2 text-sm font-medium">OSMU 스튜디오</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
 
@@ -129,13 +148,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   isActive={pathname === item.path}
                   onClick={() => navigateTo(item.path)}
                   tooltip={item.name}
-                  className={`smooth-transition rounded-2xl h-11 px-4 ${pathname === item.path
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 font-bold"
-                    : "hover:bg-black/5 text-sidebar-foreground hover:text-foreground font-medium"
+                  className={`smooth-transition rounded-xl h-10 px-4 ${pathname === item.path
+                    ? "bg-white/10 text-white font-bold backdrop-blur-md"
+                    : "hover:bg-white/5 text-sidebar-foreground hover:text-white font-medium"
                     }`}
                 >
-                  <item.icon className={`size-5 transition-transform duration-300 ${pathname === item.path ? 'scale-110' : 'opacity-70 opacity-100'}`} />
-                  <span className="ml-2 font-medium">{item.name}</span>
+                  <item.icon className={`size-4.5 transition-transform duration-300 ${pathname === item.path ? 'scale-110 opacity-100' : 'opacity-50'}`} />
+                  <span className="ml-2 text-sm font-medium">{item.name}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
@@ -144,29 +163,29 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
         {/* 상품 유틸리티 */}
         <SidebarGroup className="mt-4">
-          <SidebarGroupLabel className="px-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">상품 유틸리티</SidebarGroupLabel>
-          <SidebarMenu className="gap-1 mt-2">
+          <SidebarGroupLabel className="px-2 text-[10px] font-bold text-muted-foreground/30 uppercase tracking-[0.2em]">상품 유틸리티</SidebarGroupLabel>
+          <SidebarMenu className="gap-0.5 mt-2">
             <SidebarMenuItem>
               <SidebarMenuButton
                 isActive={pathname === "/lineart"}
                 onClick={() => navigateTo("/lineart")}
                 tooltip="라인아트 스튜디오"
-                className={`smooth-transition rounded-2xl h-11 px-4 ${pathname === "/lineart"
-                  ? "bg-[var(--pastel-blue-bg)] text-[var(--pastel-blue-fg)] font-bold"
-                  : "hover:bg-black/5 text-sidebar-foreground hover:text-foreground font-medium"
+                className={`smooth-transition rounded-xl h-10 px-4 ${pathname === "/lineart"
+                  ? "bg-white/10 text-white font-bold backdrop-blur-md"
+                  : "hover:bg-white/5 text-sidebar-foreground hover:text-white font-medium"
                   }`}
               >
-                <PenTool className={`size-5 transition-transform duration-300 ${pathname === "/lineart" ? 'scale-110' : 'opacity-70 opacity-100'}`} />
-                <span className="ml-2 font-medium">라인아트 스튜디오</span>
+                <PenTool className={`size-4.5 transition-transform duration-300 ${pathname === "/lineart" ? 'scale-110 opacity-100' : 'opacity-50'}`} />
+                <span className="ml-2 text-sm font-medium">라인아트 스튜디오</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
 
         {/* 기타 유틸리티 */}
-        <SidebarGroup className="mt-4">
-          <SidebarGroupLabel className="px-2 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">기타 유틸리티</SidebarGroupLabel>
-          <SidebarMenu className="gap-1 mt-2">
+        <SidebarGroup className="mt-4 mb-8">
+          <SidebarGroupLabel className="px-2 text-[10px] font-bold text-muted-foreground/30 uppercase tracking-[0.2em]">기타 유틸리티</SidebarGroupLabel>
+          <SidebarMenu className="gap-0.5 mt-2">
             {[
               { path: "/url-shortener", name: "URL 단축기", icon: Link2 },
               { path: "/pdf-to-jpg", name: "PDF to JPG", icon: FileText },
@@ -176,19 +195,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   isActive={pathname === item.path}
                   onClick={() => navigateTo(item.path)}
                   tooltip={item.name}
-                  className={`smooth-transition rounded-2xl h-11 px-4 ${pathname === item.path
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 font-bold"
-                    : "hover:bg-black/5 text-sidebar-foreground hover:text-foreground font-medium"
+                  className={`smooth-transition rounded-xl h-10 px-4 ${pathname === item.path
+                    ? "bg-white/10 text-white font-bold backdrop-blur-md"
+                    : "hover:bg-white/5 text-sidebar-foreground hover:text-white font-medium"
                     }`}
                 >
-                  <item.icon className={`size-5 transition-transform duration-300 ${pathname === item.path ? 'scale-110' : 'opacity-70 opacity-100'}`} />
-                  <span className="ml-2 font-medium">{item.name}</span>
+                  <item.icon className={`size-4.5 transition-transform duration-300 ${pathname === item.path ? 'scale-110 opacity-100' : 'opacity-50'}`} />
+                  <span className="ml-2 text-sm font-medium">{item.name}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
+
+      <SidebarFooter className="p-4 bg-black/20 backdrop-blur-md border-t border-white/5 mt-auto flex justify-center items-center">
+        <span className="text-[10px] font-black text-white/30 tracking-[0.4em] uppercase">V 4.1.1</span>
+      </SidebarFooter>
     </Sidebar>
   )
 }
